@@ -1,0 +1,50 @@
+name: Build Installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build_exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 instellen
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dependencies installeren
+        run: pip install pyinstaller pyserial zeroconf esptool
+
+      - name: Bouwen
+        run: python build.py
+
+      - name: Release uploaden
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "BKOS Installer (latest)"
+          files: dist/BKOS_Installer.exe
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: .exe committen naar repo
+        shell: bash
+        run: |
+          git config user.name  "GitHub Actions"
+          git config user.email "actions@github.com"
+          mkdir -p release
+          cp dist/BKOS_Installer.exe release/BKOS_Installer.exe
+          git add release/BKOS_Installer.exe
+          git diff --staged --quiet || git commit -m "ci: BKOS_Installer.exe build"
+          git push

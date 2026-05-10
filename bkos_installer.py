@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from tkinter import messagebox, scrolledtext, ttk
+import io
 
 # ─── Optionele imports ────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ class BkosInstaller(tk.Tk):
 
         self._bouw_ui()
         self._ververs_poorten()
+        self.after(400, self._haal_versie_op)   # versie ophalen na opstart
 
         if MDNS_OK:
             threading.Thread(target=self._start_mdns, daemon=True).start()
@@ -348,18 +350,18 @@ class BkosInstaller(tk.Tk):
             highlightbackground=C_RAND, highlightthickness=1)
         log_frame.pack(fill="both", expand=True, pady=(2, 0))
 
-        self._log = scrolledtext.ScrolledText(log_frame,
+        self._log_widget = scrolledtext.ScrolledText(log_frame,
             bg=C_SURFACE, fg=C_TEKST,
             font=("Consolas", 8), relief="flat",
             state="disabled", wrap="word",
             insertbackground=C_TEKST)
-        self._log.pack(fill="both", expand=True, padx=6, pady=6)
+        self._log_widget.pack(fill="both", expand=True, padx=6, pady=6)
 
         # Log tags voor kleuren
-        self._log.tag_config("ok",  foreground=C_GROEN)
-        self._log.tag_config("err", foreground=C_ROOD)
-        self._log.tag_config("dim", foreground=C_DIM)
-        self._log.tag_config("hl",  foreground=C_CYAAN)
+        self._log_widget.tag_config("ok",  foreground=C_GROEN)
+        self._log_widget.tag_config("err", foreground=C_ROOD)
+        self._log_widget.tag_config("dim", foreground=C_DIM)
+        self._log_widget.tag_config("hl",  foreground=C_CYAAN)
 
         tk.Button(parent, text="Log wissen",
             bg=C_PANEL, fg=C_DIM, relief="flat",
@@ -380,10 +382,14 @@ class BkosInstaller(tk.Tk):
             self._var_platform.set("(geen platforms beschikbaar)")
         self._var_versie.set("—")
         self._cb_versie["values"] = []
+        if hasattr(self, "_log_widget"):
+            self._haal_versie_op()
 
     def _on_platform_change(self, event=None):
         self._var_versie.set("—")
         self._cb_versie["values"] = []
+        if hasattr(self, "_log_widget"):
+            self._haal_versie_op()
 
     def _on_mcu_override(self, event=None):
         val = self._var_mcu_override.get()
@@ -779,20 +785,20 @@ class BkosInstaller(tk.Tk):
 
     def _log(self, tekst: str, tag: str = ""):
         def _do():
-            self._log.config(state="normal")
+            self._log_widget.config(state="normal")
             ts = time.strftime("%H:%M:%S")
             if tag:
-                self._log.insert("end", f"[{ts}] {tekst}\n", tag)
+                self._log_widget.insert("end", f"[{ts}] {tekst}\n", tag)
             else:
-                self._log.insert("end", f"[{ts}] {tekst}\n")
-            self._log.see("end")
-            self._log.config(state="disabled")
+                self._log_widget.insert("end", f"[{ts}] {tekst}\n")
+            self._log_widget.see("end")
+            self._log_widget.config(state="disabled")
         self.after(0, _do)
 
     def _log_wissen(self):
-        self._log.config(state="normal")
-        self._log.delete("1.0", "end")
-        self._log.config(state="disabled")
+        self._log_widget.config(state="normal")
+        self._log_widget.delete("1.0", "end")
+        self._log_widget.config(state="disabled")
 
     def _set_status(self, tekst: str):
         self.after(0, lambda: self._var_status.set(tekst))

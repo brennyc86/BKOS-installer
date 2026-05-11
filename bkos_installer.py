@@ -647,31 +647,25 @@ class BkosInstaller(tk.Tk):
         self._set_status(f"Flashing {port}...")
         self._set_progress(45)
 
-        # Bouw esptool-commando
-        try:
-            import esptool
-            ESPTOOL_MOD = True
-        except ImportError:
-            ESPTOOL_MOD = False
+        esptool_args = [
+            "--chip",  chip,
+            "--port",  port,
+            "--baud",  baud,
+            "--before", "default_reset",
+            "--after",  "hard_reset",
+            "write_flash", "-z", addr, firmware_pad
+        ]
 
-        if ESPTOOL_MOD:
-            # Aanroepen via Python-module (werkt ook in .exe)
-            args = [
-                "--chip",  chip,
-                "--port",  port,
-                "--baud",  baud,
-                "--before", "default_reset",
-                "--after",  "hard_reset",
-                "write_flash", "-z", addr, firmware_pad
-            ]
-            self._log(f"esptool args: {' '.join(args)}", "dim")
+        if getattr(sys, "frozen", False):
+            # PyInstaller .exe: gebruik module-API (stub-bestanden via --collect-data)
             try:
+                import esptool
                 def _voortgang(pct):
                     self._set_progress(45 + int(pct * 0.55))
                 old_stdout = sys.stdout
                 sys.stdout = _EsptoolCapture(self, _voortgang)
                 try:
-                    esptool.main(args)
+                    esptool.main(esptool_args)
                 finally:
                     sys.stdout = old_stdout
                 self._log("✅ Flash geslaagd!", "ok")
@@ -682,13 +676,12 @@ class BkosInstaller(tk.Tk):
             except Exception as e:
                 self._log(f"esptool fout: {e}", "err")
         else:
-            # Fallback: subprocess
-            self._log("esptool niet gevonden als module — probeer subprocess", "dim")
-            cmd = ["esptool.py",
-                   "--chip", chip, "--port", port, "--baud", baud,
-                   "--before", "default_reset", "--after", "hard_reset",
-                   "write_flash", "-z", addr, firmware_pad]
-            self._run_subprocess(cmd, 45, 55)
+            # Dev-modus: subprocess via python -m esptool
+            # (vindt stub-bestanden altijd correct via module-pad)
+            cmd = [sys.executable, "-m", "esptool"] + esptool_args
+            ok = self._run_subprocess(cmd, 45, 55)
+            if not ok:
+                self._log("→ Als de poort bezet is: sluit Arduino IDE / wacht 5s en probeer opnieuw.", "dim")
 
     # ─── WiFi OTA flashing ────────────────────────────────────────────────
 
@@ -696,6 +689,18 @@ class BkosInstaller(tk.Tk):
         self._log(f"WiFi OTA → {host}:{ota_port}")
         self._set_status(f"OTA naar {host}...")
         self._set_progress(45)
+
+        # Controleer eerst of het device bereikbaar is op de OTA-poort (UDP)
+        self._log("Verbinding testen...", "dim")
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(3)
+            sock.connect((host, ota_port))
+            sock.close()
+        except OSError as e:
+            self._log(f"✗ Device niet bereikbaar op {host}:{ota_port} — {e}", "err")
+            self._log("→ Controleer: WiFi verbonden? OTA-push ingeschakeld op het apparaat?", "dim")
+            return
 
         espota_pad = self._bundle_pad("espota.py")
         if not os.path.exists(espota_pad):
@@ -712,7 +717,9 @@ class BkosInstaller(tk.Tk):
         if pw:
             cmd += ["--auth", pw]
 
-        self._run_subprocess(cmd, 45, 55)
+        ok = self._run_subprocess(cmd, 45, 55)
+        if not ok:
+            self._log("→ Mogelijke oorzaken: OTA-push uitgeschakeld, verkeerd wachtwoord, of device heeft geen geheugen vrij.", "dim")
 
     # ─── Pico W UF2 flashing ─────────────────────────────────────────────
 
@@ -774,9 +781,10 @@ class BkosInstaller(tk.Tk):
 
     # ─── Subprocess helper ────────────────────────────────────────────────
 
-    def _run_subprocess(self, cmd, pct_start, pct_range):
-        # Verberg het wachtwoord in de log
-        log_cmd = [("***" if a == self._var_ota_pw.get() and a else a) for a in cmd]
+    def _run_subprocess(self, cmd, pct_start, pct_range) -> bool:
+        """Start subprocess, log uitvoer, geeft True terug bij succes."""
+        pw = self._var_ota_pw.get()
+        log_cmd = [("***" if a == pw and a else a) for a in cmd]
         self._log(f"$ {' '.join(log_cmd)}", "dim")
         try:
             proc = subprocess.Popen(
@@ -789,7 +797,12 @@ class BkosInstaller(tk.Tk):
                 if not lijn:
                     continue
                 laatste_lijn = lijn
-                tag = "err" if any(w in lijn.lower() for w in ("error", "failed", "auth")) else ""
+                if any(w in lijn.lower() for w in ("error", "failed", "auth", "denied", "busy")):
+                    tag = "err"
+                elif any(w in lijn.lower() for w in ("writing", "uploading", "%")):
+                    tag = "hl"
+                else:
+                    tag = ""
                 self._log(lijn, tag)
                 m = re.search(r'(\d+)\s*%', lijn)
                 if m:
@@ -799,14 +812,21 @@ class BkosInstaller(tk.Tk):
             if proc.returncode == 0:
                 self._log("✅ Geslaagd!", "ok")
                 self._set_progress(100)
+                return True
             else:
                 self._log(f"✗ Fout (exitcode {proc.returncode})", "err")
-                if "auth" in laatste_lijn.lower():
+                ll = laatste_lijn.lower()
+                if "auth" in ll:
                     self._log("→ Controleer het OTA-wachtwoord.", "err")
+                elif "busy" in ll or "permission" in ll or "toegang" in ll:
+                    self._log("→ Poort bezet — sluit Arduino IDE / wacht 5 s en probeer opnieuw.", "err")
+                return False
         except FileNotFoundError:
             self._log(f"Commando niet gevonden: {cmd[0]}", "err")
+            return False
         except Exception as e:
             self._log(f"Subprocess fout: {e}", "err")
+            return False
 
     # ─── UI helpers ───────────────────────────────────────────────────────
 

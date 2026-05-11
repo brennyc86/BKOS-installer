@@ -12,11 +12,11 @@ args = [
     "--windowed",
     "--name", "BKOS_Installer",
     "--add-data", f"espota.py{os.pathsep}.",
-    "--icon", "icon.ico" if os.path.exists("icon.ico") else "NONE",
+    "--collect-data", "esptool",   # stub flasher JSON-bestanden meebundelen
     "--clean",
 ]
 
-# Verwijder --icon als er geen icon is
-args = [a for a in args if a != "NONE" and not (a == "--icon" and "NONE" in args)]
+if os.path.exists("icon.ico"):
+    args += ["--icon", "icon.ico"]
 
 PyInstaller.__main__.run(args)

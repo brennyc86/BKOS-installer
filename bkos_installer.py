@@ -308,7 +308,7 @@ class BkosInstaller(tk.Tk):
             command=self._scan_wifi).pack(side="left")
 
         rw2 = tk.Frame(t_wifi, bg=C_SURFACE)
-        rw2.pack(fill="x", pady=(0, 4))
+        rw2.pack(fill="x", pady=(0, 2))
         lbl(rw2, "IP/hostnaam:").pack(side="left")
         self._var_wifi_ip = tk.StringVar()
         tk.Entry(rw2, textvariable=self._var_wifi_ip,
@@ -317,9 +317,19 @@ class BkosInstaller(tk.Tk):
         tk.Label(rw2, text="(handmatig)", bg=C_SURFACE,
             fg=C_DIM, font=("Segoe UI", 8)).pack(side="left", padx=4)
 
+        rw3 = tk.Frame(t_wifi, bg=C_SURFACE)
+        rw3.pack(fill="x", pady=(0, 4))
+        lbl(rw3, "Wachtwoord:").pack(side="left")
+        self._var_ota_pw = tk.StringVar(value="bkos2025")
+        tk.Entry(rw3, textvariable=self._var_ota_pw,
+            bg=C_PANEL, fg=C_TEKST, insertbackground=C_TEKST,
+            width=14, relief="flat", font=("Consolas", 9)).pack(side="left")
+        tk.Label(rw3, text="(leeg = geen wachtwoord)", bg=C_SURFACE,
+            fg=C_DIM, font=("Segoe UI", 8)).pack(side="left", padx=4)
+
         self._wifi_notitie = tk.Label(poort_frame,
-            text="ℹ Activeer OTA op het apparaat via het OTA-scherm.",
-            bg=C_SURFACE, fg=C_DIM, font=("Segoe UI", 8),
+            text="ℹ Schakel OTA-push in via het OTA-scherm op het apparaat.",
+            bg=C_SURFACE, fg=C_AMBER, font=("Segoe UI", 8),
             wraplength=300, justify="left")
         self._wifi_notitie.pack(anchor="w", padx=12, pady=(0, 6))
 
@@ -527,6 +537,11 @@ class BkosInstaller(tk.Tk):
             if not host:
                 messagebox.showwarning("WiFi", "Geen WiFi-apparaat geselecteerd of IP ingevoerd.")
                 return
+            if not messagebox.askyesno("OTA bevestigen",
+                    "Controleer: is OTA-push ingeschakeld op het apparaat?\n"
+                    "(OTA-scherm → schakelaar aan)\n\n"
+                    "Doorgaan?"):
+                return
         else:
             methode = "serieel"
             com_label = self._var_com.get()
@@ -692,6 +707,11 @@ class BkosInstaller(tk.Tk):
                "--port", str(ota_port),
                "--file", firmware_pad,
                "--progress"]
+
+        pw = self._var_ota_pw.get().strip()
+        if pw:
+            cmd += ["--auth", pw]
+
         self._run_subprocess(cmd, 45, 55)
 
     # ─── Pico W UF2 flashing ─────────────────────────────────────────────
@@ -755,17 +775,22 @@ class BkosInstaller(tk.Tk):
     # ─── Subprocess helper ────────────────────────────────────────────────
 
     def _run_subprocess(self, cmd, pct_start, pct_range):
-        self._log(f"$ {' '.join(cmd)}", "dim")
+        # Verberg het wachtwoord in de log
+        log_cmd = [("***" if a == self._var_ota_pw.get() and a else a) for a in cmd]
+        self._log(f"$ {' '.join(log_cmd)}", "dim")
         try:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1
             )
+            laatste_lijn = ""
             for lijn in proc.stdout:
                 lijn = lijn.rstrip()
                 if not lijn:
                     continue
-                self._log(lijn)
+                laatste_lijn = lijn
+                tag = "err" if any(w in lijn.lower() for w in ("error", "failed", "auth")) else ""
+                self._log(lijn, tag)
                 m = re.search(r'(\d+)\s*%', lijn)
                 if m:
                     pct = pct_start + int(m.group(1)) * pct_range // 100
@@ -775,7 +800,9 @@ class BkosInstaller(tk.Tk):
                 self._log("✅ Geslaagd!", "ok")
                 self._set_progress(100)
             else:
-                self._log(f"Fout (exitcode {proc.returncode})", "err")
+                self._log(f"✗ Fout (exitcode {proc.returncode})", "err")
+                if "auth" in laatste_lijn.lower():
+                    self._log("→ Controleer het OTA-wachtwoord.", "err")
         except FileNotFoundError:
             self._log(f"Commando niet gevonden: {cmd[0]}", "err")
         except Exception as e:

@@ -685,41 +685,196 @@ class BkosInstaller(tk.Tk):
 
     # ─── WiFi OTA flashing ────────────────────────────────────────────────
 
-    def _flash_ota(self, host, firmware_pad, ota_port=3232):
+    def _flash_ota(self, host, firmware_pad, ota_port=3232):  # noqa: C901
         self._log(f"WiFi OTA → {host}:{ota_port}")
         self._set_status(f"OTA naar {host}...")
         self._set_progress(45)
 
-        # Controleer eerst of het device bereikbaar is op de OTA-poort (UDP)
-        self._log("Verbinding testen...", "dim")
+        # Firmware inladen en MD5 berekenen
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(3)
-            sock.connect((host, ota_port))
-            sock.close()
+            with open(firmware_pad, "rb") as f:
+                fw_data = f.read()
         except OSError as e:
-            self._log(f"✗ Device niet bereikbaar op {host}:{ota_port} — {e}", "err")
-            self._log("→ Controleer: WiFi verbonden? OTA-push ingeschakeld op het apparaat?", "dim")
+            self._log(f"Kan firmware niet lezen: {e}", "err")
+            return
+        fw_size = len(fw_data)
+        fw_md5  = hashlib.md5(fw_data).hexdigest()
+        fw_naam = os.path.basename(firmware_pad)
+        self._log(f"Firmware: {fw_size // 1024} KB  MD5: {fw_md5[:16]}...", "dim")
+
+        # TCP server aanmaken (device verbindt terug naar ons)
+        local_port = random.randint(10000, 60000)
+        tcp_srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcp_srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            tcp_srv.bind(("", local_port))
+            tcp_srv.listen(1)
+        except OSError as e:
+            self._log(f"TCP server aanmaken mislukt (poort {local_port}): {e}", "err")
+            tcp_srv.close()
             return
 
-        espota_pad = self._bundle_pad("espota.py")
-        if not os.path.exists(espota_pad):
-            self._log("espota.py niet gevonden naast de installer.", "err")
+        invite = f"0 {local_port} {fw_size} {fw_md5}\n"
+
+        def _stuur_invite_en_wacht():
+            """Stuurt UDP invite, retourneert antwoord-string of None bij timeout."""
+            for poging in range(3):
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.settimeout(5)
+                try:
+                    s.sendto(invite.encode(), (host, ota_port))
+                    return s.recv(69).decode().strip()
+                except socket.timeout:
+                    if poging == 0:
+                        self._log("Wachten op reactie...", "dim")
+                except Exception as e:
+                    self._log(f"UDP fout: {e}", "err")
+                    return None
+                finally:
+                    s.close()
+            return None
+
+        def _authenticeer(nonce, pw, gebruik_md5_pw, oud_protocol):
+            """Challenge-response authenticatie. Retourneert True bij succes."""
+            cnonce_src = f"{fw_naam}{fw_size}{fw_md5}{host}"
+            if oud_protocol:
+                # ESP32 core 2.x: MD5 protocol (nonce = 32 chars)
+                cnonce  = hashlib.md5(cnonce_src.encode()).hexdigest()
+                pw_hash = hashlib.md5(pw.encode()).hexdigest()
+                resp    = hashlib.md5(f"{pw_hash}:{nonce}:{cnonce}".encode()).hexdigest()
+            else:
+                # ESP32 core 3.x: PBKDF2-SHA256 protocol (nonce = 64 chars)
+                cnonce  = hashlib.sha256(cnonce_src.encode()).hexdigest()
+                pw_hash = (hashlib.md5(pw.encode()).hexdigest() if gebruik_md5_pw
+                           else hashlib.sha256(pw.encode()).hexdigest())
+                salt    = f"{nonce}:{cnonce}"
+                derived = hashlib.pbkdf2_hmac("sha256", pw_hash.encode(), salt.encode(), 10000)
+                resp    = hashlib.sha256(f"{derived.hex()}:{nonce}:{cnonce}".encode()).hexdigest()
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(10)
+            try:
+                s.sendto(f"200 {cnonce} {resp}\n".encode(), (host, ota_port))
+                ack = s.recv(32).decode().strip()
+                return ack == "OK"
+            except Exception:
+                return False
+            finally:
+                s.close()
+
+        # ── Fase 1: invite sturen ────────────────────────────────────────────
+        self._log("Uitnodiging sturen naar device...", "dim")
+        data = _stuur_invite_en_wacht()
+        if data is None:
+            self._log("✗ Geen reactie van device.", "err")
+            self._log("→ OTA-push ingeschakeld? (OTA-scherm op apparaat → schakelaar aan)", "dim")
+            self._log("→ WiFi verbonden op het apparaat?", "dim")
+            tcp_srv.close()
             return
+        self._log(f"Device reactie: {data}", "dim")
 
-        cmd = [sys.executable, espota_pad,
-               "--ip", host,
-               "--port", str(ota_port),
-               "--file", firmware_pad,
-               "--progress"]
+        # ── Fase 2: authenticatie ────────────────────────────────────────────
+        if data != "OK":
+            if not data.startswith("AUTH "):
+                self._log(f"✗ Onverwacht antwoord: {data}", "err")
+                tcp_srv.close()
+                return
+            nonce = data.split(" ", 1)[1]
+            pw    = self._var_ota_pw.get().strip()
+            if not pw:
+                self._log("✗ Device vraagt wachtwoord — vul OTA-wachtwoord in.", "err")
+                tcp_srv.close()
+                return
 
-        pw = self._var_ota_pw.get().strip()
-        if pw:
-            cmd += ["--auth", pw]
+            if len(nonce) == 32:
+                self._log("Authenticeren (MD5 protocol, core 2.x)...", "dim")
+                ok_auth = _authenticeer(nonce, pw, gebruik_md5_pw=True, oud_protocol=True)
+            else:
+                self._log("Authenticeren (PBKDF2-SHA256, core 3.x)...", "dim")
+                ok_auth = _authenticeer(nonce, pw, gebruik_md5_pw=False, oud_protocol=False)
+                if not ok_auth:
+                    # Fallback: opnieuw inviten en MD5 wachtwoord-hash proberen
+                    self._log("SHA256 mislukt, opnieuw proberen met MD5 wachtwoord...", "dim")
+                    data2 = _stuur_invite_en_wacht()
+                    if data2 and data2.startswith("AUTH "):
+                        nonce2  = data2.split(" ", 1)[1]
+                        ok_auth = _authenticeer(nonce2, pw, gebruik_md5_pw=True, oud_protocol=False)
 
-        ok = self._run_subprocess(cmd, 45, 55)
-        if not ok:
-            self._log("→ Mogelijke oorzaken: OTA-push uitgeschakeld, verkeerd wachtwoord, of device heeft geen geheugen vrij.", "dim")
+            if not ok_auth:
+                self._log("✗ Authenticatie mislukt.", "err")
+                self._log("→ Controleer OTA-wachtwoord (standaard: bkos2025).", "dim")
+                tcp_srv.close()
+                return
+            self._log("✓ Authenticatie geslaagd.", "ok")
+
+        # ── Fase 3: wachten op TCP-verbinding van device ─────────────────────
+        self._log("Wachten op verbinding van device (max 15 s)...", "dim")
+        self.after(0, lambda: self._progressbar.config(mode="indeterminate"))
+        self.after(0, lambda: self._progressbar.start(10))
+
+        tcp_srv.settimeout(15)
+        conn = None
+        try:
+            conn, addr = tcp_srv.accept()
+            self._log(f"✓ Device verbonden vanaf {addr[0]}", "ok")
+        except socket.timeout:
+            self._log("✗ Device kon geen TCP-verbinding maken (timeout 15 s).", "err")
+            self._log("→ Windows Firewall blokkeert mogelijk inkomende verbindingen.", "dim")
+            self._log("  Voeg een uitzondering toe voor python.exe of BKOS_Installer.exe.", "dim")
+            return
+        except Exception as e:
+            self._log(f"✗ TCP accept fout: {e}", "err")
+            return
+        finally:
+            self.after(0, lambda: self._progressbar.stop())
+            self.after(0, lambda: self._progressbar.config(mode="determinate"))
+            tcp_srv.close()
+
+        # ── Fase 4: firmware uploaden in blokken van 1024 bytes ──────────────
+        self._set_progress(50)
+        BLOK      = 1024
+        verzonden = 0
+        laaste_ok = False
+        conn.settimeout(10)
+        try:
+            while verzonden < fw_size:
+                blok = fw_data[verzonden:verzonden + BLOK]
+                conn.sendall(blok)
+                verzonden += len(blok)
+                try:
+                    res = conn.recv(10).decode().strip()
+                    laaste_ok = "OK" in res
+                except socket.timeout:
+                    self._log(f"✗ Timeout bij byte {verzonden}.", "err")
+                    return
+                pct = 50 + int(verzonden * 50 / fw_size)
+                self._set_progress(pct)
+                if verzonden % (BLOK * 32) < BLOK or verzonden >= fw_size:
+                    self._log(
+                        f"Upload: {verzonden * 100 // fw_size}%"
+                        f"  ({verzonden // 1024}/{fw_size // 1024} KB)", "hl")
+
+            # Eindbevestiging ophalen als laatste chunk nog geen OK gaf
+            if not laaste_ok:
+                conn.settimeout(30)
+                for _ in range(10):
+                    try:
+                        res = conn.recv(32).decode().strip()
+                        if "OK" in res:
+                            laaste_ok = True
+                            break
+                    except socket.timeout:
+                        continue
+
+            if laaste_ok:
+                self._log("✅ OTA upload geslaagd! Device herstart...", "ok")
+            else:
+                self._log("⚠ Upload voltooid — geen eindbevestiging (device herstart al).", "dim")
+            self._set_progress(100)
+
+        except Exception as e:
+            self._log(f"✗ Upload fout: {e}", "err")
+        finally:
+            conn.close()
 
     # ─── Pico W UF2 flashing ─────────────────────────────────────────────
 

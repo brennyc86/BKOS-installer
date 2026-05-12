@@ -11,7 +11,6 @@ args = [
     "--onefile",
     "--windowed",
     "--name", "BKOS_Installer",
-    "--add-data", f"espota.py{os.pathsep}.",
     "--collect-data", "esptool",   # stub flasher JSON-bestanden meebundelen
     "--clean",
 ]

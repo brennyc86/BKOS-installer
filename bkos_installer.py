@@ -4,6 +4,7 @@ BKOS Installer — Flash tool voor BKOS firmware
 Detecteert MCU, downloadt firmware van GitHub en flashed via serieel of WiFi.
 """
 
+import base64
 import ctypes
 import hashlib
 import json
@@ -224,6 +225,7 @@ class BkosInstaller(tk.Tk):
         self._wifi_devices: dict[str, str] = {}   # hostname → ip
         self._download_cache: dict[str, str] = {} # url → lokaal pad
         self._stable_url_cache: dict[str, str] = {} # versie → download-url (stabiel kanaal)
+        self._beta_sha_cache: dict[str, str]   = {} # versie → commit SHA (beta kanaal)
         self._flash_thread: threading.Thread | None = None
         self._zconf: "Zeroconf | None" = None
         self._actieve_tab = 0   # 0 = serieel, 1 = wifi
@@ -353,9 +355,9 @@ class BkosInstaller(tk.Tk):
 
         r_kanaal = rij(fw_frame)
         lbl(r_kanaal, "Kanaal:").pack(side="left")
-        self._var_kanaal = tk.StringVar(value="Laatste build")
+        self._var_kanaal = tk.StringVar(value="Stabiele release")
         self._cb_kanaal = combo(r_kanaal, self._var_kanaal,
-            ["Laatste build", "Stabiele release"], width=18)
+            ["Stabiele release", "Beta release"], width=18)
         self._cb_kanaal.pack(side="left")
         self._cb_kanaal.bind("<<ComboboxSelected>>", self._on_kanaal_change)
 
@@ -497,10 +499,13 @@ class BkosInstaller(tk.Tk):
         self._var_versie.set("—")
         self._cb_versie["values"] = []
         self._stable_url_cache = {}
-        # Stabiel kanaal alleen beschikbaar voor BKOS-NUI
+        self._beta_sha_cache   = {}
+        # Stabiel/beta kanaal alleen voor BKOS-NUI; blanco heeft alleen "Laatste build"
         if hasattr(self, "_cb_kanaal"):
             if fw == "BKOS-NUI":
-                self._cb_kanaal["values"] = ["Laatste build", "Stabiele release"]
+                self._cb_kanaal["values"] = ["Stabiele release", "Beta release"]
+                if self._var_kanaal.get() not in ("Stabiele release", "Beta release"):
+                    self._var_kanaal.set("Stabiele release")
             else:
                 self._cb_kanaal["values"] = ["Laatste build"]
                 self._var_kanaal.set("Laatste build")
@@ -511,6 +516,7 @@ class BkosInstaller(tk.Tk):
         self._var_versie.set("—")
         self._cb_versie["values"] = []
         self._stable_url_cache = {}
+        self._beta_sha_cache   = {}
         if hasattr(self, "_log_widget"):
             self._haal_versie_op()
 
@@ -518,6 +524,7 @@ class BkosInstaller(tk.Tk):
         self._var_versie.set("—")
         self._cb_versie["values"] = []
         self._stable_url_cache = {}
+        self._beta_sha_cache   = {}
         if hasattr(self, "_log_widget"):
             self._haal_versie_op()
 
@@ -631,7 +638,7 @@ class BkosInstaller(tk.Tk):
             self._log(f"Geen platform voor: {plat_k}", "err")
             return
 
-        # Stabiel kanaal: alle releases ophalen uit releases.json
+        # ── Stabiel kanaal: releases.json ────────────────────────────────
         if kanaal == "Stabiele release" and fw == "BKOS-NUI":
             skey = RELEASES_SKEY.get(plat_k)
             if not skey:
@@ -662,10 +669,68 @@ class BkosInstaller(tk.Tk):
                 self._log(f"Releases ophalen mislukt: {e}", "err")
             return
 
-        # Laatste build: versie.txt ophalen
+        # ── Beta kanaal: commit history via GitHub API ────────────────────
+        if kanaal == "Beta release" and fw == "BKOS-NUI":
+            bin_rel        = plat.get("ser_bin") or plat.get("ota_bin")
+            versie_bestand = plat.get("versie_bestand", "")
+            repo           = cfg["repo"]
+            if not bin_rel:
+                self._log("Geen firmware pad voor dit platform.", "err")
+                return
+            api_url = (f"{API_BASE}/repos/{repo}/commits"
+                       f"?path={bin_rel}&per_page=20")
+            self._log("Beta versies ophalen via GitHub...", "dim")
+            try:
+                req = urllib.request.Request(
+                    api_url,
+                    headers={"Accept": "application/vnd.github.v3+json"})
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    if r.status == 403:
+                        self._log("GitHub rate limit bereikt — probeer later.", "err")
+                        return
+                    commits = json.loads(r.read().decode())
+                versies = []
+                sha_map = {}
+                for commit in commits:
+                    sha = commit["sha"]
+                    msg = commit["commit"]["message"].split("\n")[0]
+                    # Probeer versie te parsen uit commit bericht (formaat X.Y.YYMMDD.I)
+                    m = re.search(r'\b(\d+\.\d+\.\d{6}\.\d+)\b', msg)
+                    if m:
+                        v = m.group(1)
+                    else:
+                        # Fallback: versie bestand ophalen op dit SHA
+                        try:
+                            vurl = (f"{API_BASE}/repos/{repo}/contents/"
+                                    f"{versie_bestand}?ref={sha}")
+                            vreq = urllib.request.Request(
+                                vurl,
+                                headers={"Accept": "application/vnd.github.v3+json"})
+                            with urllib.request.urlopen(vreq, timeout=10) as vr:
+                                vdata = json.loads(vr.read().decode())
+                            v = base64.b64decode(vdata["content"]).decode().strip()
+                        except Exception:
+                            continue
+                    if v and v not in sha_map:
+                        versies.append(v)
+                        sha_map[v] = sha
+                self._beta_sha_cache = sha_map
+                if versies:
+                    self.after(0, lambda vs=versies: [
+                        self._var_versie.set(vs[0]),
+                        self._cb_versie.config(values=vs)
+                    ])
+                    self._log(f"{len(versies)} beta versie(s) gevonden", "ok")
+                else:
+                    self._log("Geen beta versies gevonden.", "err")
+            except Exception as e:
+                self._log(f"Beta versies ophalen mislukt: {e}", "err")
+            return
+
+        # ── Laatste build: versie.txt (voor BKOS-blanco) ─────────────────
         url = (f"{RAW_BASE}/{cfg['repo']}/{cfg['branch']}/"
                f"{plat['versie_bestand']}")
-        self._log(f"Versie ophalen...", "dim")
+        self._log("Versie ophalen...", "dim")
         try:
             with urllib.request.urlopen(url, timeout=10) as r:
                 versie = r.read().decode().strip()
@@ -732,25 +797,39 @@ class BkosInstaller(tk.Tk):
 
     def _flash_thread_func(self, methode, host, fw, plat_k, plat, cfg):
         try:
-            kanaal = self._var_kanaal.get() if hasattr(self, "_var_kanaal") else "Laatste build"
+            kanaal  = self._var_kanaal.get() if hasattr(self, "_var_kanaal") else "Laatste build"
+            repo    = cfg["repo"]
+            branch  = cfg["branch"]
+            bin_key = "ota_bin" if methode == "wifi" else "ser_bin"
+            bin_rel = plat.get(bin_key)
+            if not bin_rel:
+                self._log(f"Geen firmware geconfigureerd voor methode '{methode}'.", "err")
+                return
 
             if kanaal == "Stabiele release" and fw == "BKOS-NUI":
-                # Download rechtstreeks van de release-URL uit releases.json
+                # Rechtstreeks release-URL uit releases.json
                 versie = self._var_versie.get()
                 url = self._stable_url_cache.get(versie, "")
                 if not url:
                     self._log(f"Geen download-URL voor versie {versie}. Ververs de versielijst.", "err")
                     return
-                naam = url.split("/")[-1]
+                naam   = url.split("/")[-1]
                 lokaal = self._download(url, naam)
+
+            elif kanaal == "Beta release" and fw == "BKOS-NUI":
+                # Raw URL via commit SHA
+                versie = self._var_versie.get()
+                sha    = self._beta_sha_cache.get(versie, "")
+                if sha:
+                    url = f"{RAW_BASE}/{repo}/{sha}/{bin_rel}"
+                else:
+                    # Cache verlopen — val terug op main branch
+                    self._log("SHA niet in cache — meest recente versie wordt gebruikt.", "dim")
+                    url = f"{RAW_BASE}/{repo}/{branch}/{bin_rel}"
+                naam   = os.path.basename(bin_rel)
+                lokaal = self._download(url, naam)
+
             else:
-                repo   = cfg["repo"]
-                branch = cfg["branch"]
-                bin_key = "ota_bin" if methode == "wifi" else "ser_bin"
-                bin_rel = plat.get(bin_key)
-                if not bin_rel:
-                    self._log(f"Geen firmware geconfigureerd voor methode '{methode}'.", "err")
-                    return
                 url    = f"{RAW_BASE}/{repo}/{branch}/{bin_rel}"
                 lokaal = self._download(url, os.path.basename(bin_rel))
 

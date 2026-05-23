@@ -65,7 +65,7 @@ CATALOG = {
         "repo":   "brennyc86/BKOS-NUI",
         "branch": "main",
         "platforms": {
-            "ESP32-S3  ·  Sunton 8048S070": {
+            "CYD 7 inch  ·  Sunton 8048S070": {
                 "versie_bestand": "firmware/versie_esp32s3.txt",
                 "ota_bin":        "firmware/bkos_esp32s3_8048s070.bin",
                 "ser_bin":        "firmware/bkos_esp32s3_8048s070.bin",
@@ -125,7 +125,7 @@ CATALOG = {
         "repo":   "brennyc86/BKOS-blanco",
         "branch": "main",
         "platforms": {
-            "ESP32-S3  ·  Sunton 8048S070": {
+            "CYD 7 inch  ·  Sunton 8048S070": {
                 "versie_bestand": "firmware/versie_esp32s3.txt",
                 "ota_bin":        "firmware/bkos_blanco_esp32s3.bin",
                 "ser_bin":        "firmware/bkos_blanco_esp32s3.bin",
@@ -188,11 +188,24 @@ USB_HINTS = {
     (0x2E8A, 0x000A): "Raspberry Pi Pico W  ·  2.8\" 2432",
     (0x2E8A, 0x0003): "Raspberry Pi Pico W  ·  2.8\" 2432",
     (0x2E8A, 0x0005): "Raspberry Pi Pico W  ·  2.8\" 2432",
-    (0x303A, 0x1001): "ESP32-S3  ·  Sunton 8048S070",
-    (0x303A, 0x0002): "ESP32-S3  ·  Sunton 8048S070",
-    (0x1A86, 0x55D4): "ESP32-S3  ·  Sunton 8048S070",
+    (0x303A, 0x1001): "CYD 7 inch  ·  Sunton 8048S070",
+    (0x303A, 0x0002): "CYD 7 inch  ·  Sunton 8048S070",
+    (0x1A86, 0x55D4): "CYD 7 inch  ·  Sunton 8048S070",
     (0x10C4, 0xEA60): None,   # CP2102 — niet uniek
     (0x1A86, 0x7523): None,   # CH340 — niet uniek
+}
+
+# URL van de releases.json index voor stabiele BKOS-NUI releases
+BKOS_NUI_RELEASES_URL = f"{RAW_BASE}/brennyc86/BKOS-NUI/main/firmware/releases.json"
+
+# Mapping van platform-naam naar veld in releases.json
+RELEASES_SKEY = {
+    "CYD 7 inch  ·  Sunton 8048S070":        "url_s3",
+    "ESP32 WROOM  ·  2.8\" 2432":            "url_wroom",
+    "ESP32 CYD  ·  2.8\" (CYD28)":           "url_cyd28",
+    "ESP32 CYD  ·  4\" Landscape (CYD40H)":  "url_cyd40h",
+    "ESP32 CYD  ·  4\" Portrait (CYD40V)":   "url_cyd40v",
+    "Raspberry Pi Pico W  ·  2.8\" 2432":    "url_pico",
 }
 
 
@@ -210,6 +223,7 @@ class BkosInstaller(tk.Tk):
 
         self._wifi_devices: dict[str, str] = {}   # hostname → ip
         self._download_cache: dict[str, str] = {} # url → lokaal pad
+        self._stable_url_cache: dict[str, str] = {} # versie → download-url (stabiel kanaal)
         self._flash_thread: threading.Thread | None = None
         self._zconf: "Zeroconf | None" = None
         self._actieve_tab = 0   # 0 = serieel, 1 = wifi
@@ -336,6 +350,14 @@ class BkosInstaller(tk.Tk):
         self._cb_platform = combo(r2, self._var_platform, [], width=27)
         self._cb_platform.pack(side="left")
         self._cb_platform.bind("<<ComboboxSelected>>", self._on_platform_change)
+
+        r_kanaal = rij(fw_frame)
+        lbl(r_kanaal, "Kanaal:").pack(side="left")
+        self._var_kanaal = tk.StringVar(value="Laatste build")
+        self._cb_kanaal = combo(r_kanaal, self._var_kanaal,
+            ["Laatste build", "Stabiele release"], width=18)
+        self._cb_kanaal.pack(side="left")
+        self._cb_kanaal.bind("<<ComboboxSelected>>", self._on_kanaal_change)
 
         r3 = rij(fw_frame)
         lbl(r3, "Versie:").pack(side="left")
@@ -474,12 +496,28 @@ class BkosInstaller(tk.Tk):
             self._var_platform.set("(geen platforms beschikbaar)")
         self._var_versie.set("—")
         self._cb_versie["values"] = []
+        self._stable_url_cache = {}
+        # Stabiel kanaal alleen beschikbaar voor BKOS-NUI
+        if hasattr(self, "_cb_kanaal"):
+            if fw == "BKOS-NUI":
+                self._cb_kanaal["values"] = ["Laatste build", "Stabiele release"]
+            else:
+                self._cb_kanaal["values"] = ["Laatste build"]
+                self._var_kanaal.set("Laatste build")
         if hasattr(self, "_log_widget"):
             self._haal_versie_op()
 
     def _on_platform_change(self, event=None):
         self._var_versie.set("—")
         self._cb_versie["values"] = []
+        self._stable_url_cache = {}
+        if hasattr(self, "_log_widget"):
+            self._haal_versie_op()
+
+    def _on_kanaal_change(self, event=None):
+        self._var_versie.set("—")
+        self._cb_versie["values"] = []
+        self._stable_url_cache = {}
         if hasattr(self, "_log_widget"):
             self._haal_versie_op()
 
@@ -586,11 +624,45 @@ class BkosInstaller(tk.Tk):
     def _versie_thread(self):
         fw      = self._var_fw.get()
         plat_k  = self._var_platform.get()
+        kanaal  = self._var_kanaal.get() if hasattr(self, "_var_kanaal") else "Laatste build"
         cfg     = CATALOG.get(fw, {})
         plat    = cfg.get("platforms", {}).get(plat_k)
         if not plat:
             self._log(f"Geen platform voor: {plat_k}", "err")
             return
+
+        # Stabiel kanaal: alle releases ophalen uit releases.json
+        if kanaal == "Stabiele release" and fw == "BKOS-NUI":
+            skey = RELEASES_SKEY.get(plat_k)
+            if not skey:
+                self._log(f"Geen releases.json sleutel voor: {plat_k}", "err")
+                return
+            self._log("Stabiele releases ophalen...", "dim")
+            try:
+                with urllib.request.urlopen(BKOS_NUI_RELEASES_URL, timeout=10) as r:
+                    data = json.loads(r.read().decode())
+                versies = []
+                url_map = {}
+                for entry in data.get("releases", []):
+                    url_v = entry.get(skey, "")
+                    if url_v:
+                        v = entry["versie"]
+                        versies.append(v)
+                        url_map[v] = url_v
+                self._stable_url_cache = url_map
+                if versies:
+                    self.after(0, lambda vs=versies: [
+                        self._var_versie.set(vs[0]),
+                        self._cb_versie.config(values=vs)
+                    ])
+                    self._log(f"{len(versies)} stabiele versie(s) gevonden", "ok")
+                else:
+                    self._log(f"Geen stabiele releases beschikbaar voor {plat_k}", "err")
+            except Exception as e:
+                self._log(f"Releases ophalen mislukt: {e}", "err")
+            return
+
+        # Laatste build: versie.txt ophalen
         url = (f"{RAW_BASE}/{cfg['repo']}/{cfg['branch']}/"
                f"{plat['versie_bestand']}")
         self._log(f"Versie ophalen...", "dim")
@@ -660,16 +732,28 @@ class BkosInstaller(tk.Tk):
 
     def _flash_thread_func(self, methode, host, fw, plat_k, plat, cfg):
         try:
-            repo   = cfg["repo"]
-            branch = cfg["branch"]
-            bin_key = "ota_bin" if methode == "wifi" else "ser_bin"
-            bin_rel = plat.get(bin_key)
-            if not bin_rel:
-                self._log(f"Geen firmware geconfigureerd voor methode '{methode}'.", "err")
-                return
+            kanaal = self._var_kanaal.get() if hasattr(self, "_var_kanaal") else "Laatste build"
 
-            url    = f"{RAW_BASE}/{repo}/{branch}/{bin_rel}"
-            lokaal = self._download(url, os.path.basename(bin_rel))
+            if kanaal == "Stabiele release" and fw == "BKOS-NUI":
+                # Download rechtstreeks van de release-URL uit releases.json
+                versie = self._var_versie.get()
+                url = self._stable_url_cache.get(versie, "")
+                if not url:
+                    self._log(f"Geen download-URL voor versie {versie}. Ververs de versielijst.", "err")
+                    return
+                naam = url.split("/")[-1]
+                lokaal = self._download(url, naam)
+            else:
+                repo   = cfg["repo"]
+                branch = cfg["branch"]
+                bin_key = "ota_bin" if methode == "wifi" else "ser_bin"
+                bin_rel = plat.get(bin_key)
+                if not bin_rel:
+                    self._log(f"Geen firmware geconfigureerd voor methode '{methode}'.", "err")
+                    return
+                url    = f"{RAW_BASE}/{repo}/{branch}/{bin_rel}"
+                lokaal = self._download(url, os.path.basename(bin_rel))
+
             if not lokaal:
                 return
 

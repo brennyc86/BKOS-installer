@@ -41,49 +41,65 @@ try:
 except ImportError:
     MDNS_OK = False
 
-# ─── Ingebed BKOS-logo icoon (256×256 PNG, base64) ──────────────────────
+# ─── Ingebedde afbeeldingen (PNG, base64) ───────────────────────────────
+
+HEADER_LOGO_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAKAAAAA8CAYAAADha7EVAAADN0lEQVR4nO2dy5XbMAxFKZ2pIot0"
+    "4BTiAlykClAN2auFbKcGZ6U5OrL4FUm8B/Au5yeCvARAyx5N3//+Os08nq+39Bjusq3LJD2GVkxa"
+    "BNQgWg5apKQU0JpsqTBKSSHgEK4MBiFhBGwtWevFYNskKHJ+SQ+g5cKhTDIix3mXnCcRAYd05YTi"
+    "K53X/fck5q6rgEO8e7SQT5qmArJOCiI++WrO8dXfar2xmwjYW7yUSao5JgvZdqd1ea4qoETGi00M"
+    "exZGKbuP5+vdQsIqAkotMsritAItvhYn52IBURcYdVy59Oj57lBLxvnuxaWw1Iehc8eH7AyIIJ9m"
+    "0MpuKqWHlawMiDwBzuGPLwarfEdyxxnNgCyBs4Pe8+WQkw2LekBpRv/HQcrmCQrIuPvY2NZl0pT9"
+    "zsRi8AqIHDzy2HLQ0POlEIrlowfUFDgymrPeFb47KZQ94ICTq801x36ACYbDifaeL8Y5xtn3jUF9"
+    "rPR8MY6xzucvsPB4vt4S718rJZT1GOe/FvQ9IJOEg0+mX39+q9h9Pcvb1bV81xhl18+2LpP4p+J6"
+    "IJURRyaOoyYD7kgt+jmbpY7Dehak7wEH3KgpwSjlLncc27pMlrMgfQlGES9G7C3sViWkFlDqE3E5"
+    "0uecji1KSFuCNd7OsliOKQ8hjGV38Mm2LhOdgCwv7MbGUvLCtUZmLQGjyJdzb5ftfnZN9hipMqCF"
+    "hbHG7BzHwjKU3rv/n+9I6H2DmvjJgBaCbQnKJmDg6Nrs+8agL1YEPjtG1QNqR/uBJOlDSVZ6DyY0"
+    "rIcvBm8G1BA0IxpfHwyNPViCkYIO9UhI46yBJgljY472gIxBD+RJbeWSDiH7H5OW0VIW9IEeZ64n"
+    "qk7B6IujnZL5zxZQOhNaeb0sdE8ZcaOVjqk4A0qKGCvFiAtUG5QY78539adl9spQKAuwI/UYMsSH"
+    "AuVQvQfsJYaVUuwcRqytKkuTQ0ivMmj9/6r0ouVadnlgdQ9JpEuyZIwtrt1rPsWemM48aVdIb7K7"
+    "15eaOzEBdxA+OlkDhMNX7hikq4ZzAAKeGT1dWxCkOwIn4Jkh5D3QhDsDL2AMy4Kiy5UCvYA+tImp"
+    "QbYr/gOowDLTSFFFOwAAAABJRU5ErkJggg=="
+)
 
 ICON_PNG_B64 = (
-    "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"
-    "AAAAAElFTkSuQmCC"
+    "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"
+    "AABJRU5ErkJggg=="
 )
 
 # ─── Kleuren ──────────────────────────────────────────────────────────────
@@ -98,8 +114,8 @@ C_ROOD    = "#b83030"   # fout rood
 C_AMBER   = "#9a6a00"   # amber waarschuwing
 C_TEKST   = "#1e2a18"   # donker tekst op lichte achtergrond
 C_DIM     = "#6a5e40"   # gedimde tekst op lichte achtergrond
-C_SCHADUUW = "#6a5a38"   # 3D schaduw: donker warm bruin
-C_GLANS    = "#f5edd8"   # 3D glans: licht crème
+C_SCHADUUW = "#4a3818"   # 3D schaduw: donker warm bruin
+C_GLANS    = "#fdf9f0"   # 3D glans: licht crème
 C_BTN     = "#2d6333"
 C_BTN_HOV = "#3a7d40"
 
@@ -269,6 +285,7 @@ class BkosInstaller(tk.Tk):
         self.minsize(640, 560)
         self.configure(bg=C_BG)
 
+        self._logo_img = None   # BKOS-logo voor header
         self._wifi_devices: dict[str, str] = {}   # hostname → ip
         self._download_cache: dict[str, str] = {} # url → lokaal pad
         self._stable_url_cache: dict[str, str] = {} # versie → download-url (stabiel kanaal)
@@ -284,10 +301,12 @@ class BkosInstaller(tk.Tk):
         except Exception:
             pass
 
+        self._logo_img = self._laad_header_logo()
         self._bouw_ui()
         self._ververs_poorten()
         self.after(400, self._haal_versie_op)   # versie ophalen na opstart
 
+        self.after(300, self._stel_min_hoogte_in)
         if MDNS_OK:
             threading.Thread(target=self._start_mdns, daemon=True).start()
 
@@ -313,11 +332,15 @@ class BkosInstaller(tk.Tk):
             foreground=[("selected", C_CYAAN)])
 
         # ── Header ───────────────────────────────────────────────────────
-        hdr = tk.Frame(self, bg=C_SURFACE, height=52)
+        hdr = tk.Frame(self, bg=C_SURFACE, height=64)
         hdr.pack(fill="x", side="top")
         hdr.pack_propagate(False)
-        tk.Label(hdr, text="⚓", bg=C_SURFACE, fg=C_BTN,
-            font=("Segoe UI", 18)).pack(side="left", padx=(16, 6), pady=8)
+        if self._logo_img:
+            tk.Label(hdr, image=self._logo_img, bg=C_SURFACE).pack(
+                side="left", padx=(12, 8), pady=6)
+        else:
+            tk.Label(hdr, text="⚓", bg=C_SURFACE, fg=C_BTN,
+                font=("Segoe UI", 18)).pack(side="left", padx=(16, 6), pady=8)
         hdr_tekst = tk.Frame(hdr, bg=C_SURFACE)
         hdr_tekst.pack(side="left", pady=8)
         tk.Label(hdr_tekst, text="BKOS Installer",
@@ -394,11 +417,11 @@ class BkosInstaller(tk.Tk):
             # Groene scheidingslijn
             tk.Frame(card, bg=C_BTN, height=1).pack(fill="x")
             # Inset schaduw boven content-zone (sunken effect)
-            tk.Frame(card, bg=C_SCHADUUW, height=1).pack(fill="x")
+            tk.Frame(card, bg=C_SCHADUUW, height=2).pack(fill="x")
             f = tk.Frame(card, bg=C_PANEL)
             f.pack(fill="x")
             # Glans onder content-zone (sunken effect afronden)
-            tk.Frame(card, bg=C_GLANS, height=1).pack(fill="x", pady=(0, 4))
+            tk.Frame(card, bg=C_GLANS, height=2).pack(fill="x", pady=(0, 4))
             return f
 
         def rij(parent):
@@ -545,19 +568,19 @@ class BkosInstaller(tk.Tk):
     def _bouw_rechts(self, parent):
         # Zelfde 3D kaart-structuur als sectie()
         log_outer = tk.Frame(parent, bg=C_BTN)
-        log_outer.pack(fill="both", expand=True)
+        log_outer.pack(fill="both", expand=True, pady=(10, 0))
         log_schaduw = tk.Frame(log_outer, bg=C_SCHADUUW)
         log_schaduw.pack(fill="both", expand=True, padx=(4, 0))
         log_glans = tk.Frame(log_schaduw, bg=C_GLANS)
-        log_glans.pack(fill="both", expand=True, padx=(0, 3), pady=(0, 3))
+        log_glans.pack(fill="both", expand=True, padx=(0, 4), pady=(0, 4))
         log_card = tk.Frame(log_glans, bg=C_SURFACE)
-        log_card.pack(fill="both", expand=True, padx=(1, 0), pady=(1, 0))
+        log_card.pack(fill="both", expand=True, padx=(2, 0), pady=(2, 0))
 
         tk.Label(log_card, text="LOG", bg=C_SURFACE, fg=C_BTN,
             font=("Segoe UI", 8, "bold"), anchor="w").pack(
             fill="x", padx=10, pady=(4, 3))
         tk.Frame(log_card, bg=C_BTN, height=1).pack(fill="x")
-        tk.Frame(log_card, bg=C_SCHADUUW, height=1).pack(fill="x")
+        tk.Frame(log_card, bg=C_SCHADUUW, height=2).pack(fill="x")
 
         log_content = tk.Frame(log_card, bg=C_PANEL)
         log_content.pack(fill="both", expand=True)
@@ -1349,6 +1372,17 @@ class BkosInstaller(tk.Tk):
         else:
             base = os.path.dirname(os.path.abspath(__file__))
         return os.path.join(base, relatief)
+
+    def _laad_header_logo(self):
+        try:
+            return tk.PhotoImage(data=HEADER_LOGO_B64)
+        except Exception:
+            return None
+
+    def _stel_min_hoogte_in(self):
+        self.update_idletasks()
+        benodigde_h = self.winfo_reqheight()
+        self.minsize(640, max(560, benodigde_h))
 
     def on_close(self):
         if self._zconf:

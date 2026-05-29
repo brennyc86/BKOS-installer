@@ -256,7 +256,7 @@ class BkosInstaller(tk.Tk):
         s.configure("Horizontal.TProgressbar",
             troughcolor=C_PANEL, background=C_CYAAN,
             thickness=12, borderwidth=0)
-        s.configure("TNotebook", background=C_BG, borderwidth=0)
+        s.configure("TNotebook", background=C_PANEL, borderwidth=0)
         s.configure("TNotebook.Tab",
             background=C_PANEL, foreground=C_DIM,
             padding=[12, 6], font=("Segoe UI", 9))
@@ -278,9 +278,12 @@ class BkosInstaller(tk.Tk):
         tk.Label(hdr_tekst, text="Boordcomputer installatie hulpprogramma",
             bg=C_SURFACE, fg=C_DIM,
             font=("Segoe UI", 8)).pack(anchor="w")
+        # Zeilboot rechts in header (eerst packen = meest rechts)
+        tk.Label(hdr, text="⛵", bg=C_SURFACE, fg=C_BTN,
+            font=("Segoe UI", 26)).pack(side="right", padx=(0, 20), pady=4)
         self._lbl_verbonden = tk.Label(hdr, text="", bg=C_SURFACE,
             fg=C_GROEN, font=("Segoe UI", 9))
-        self._lbl_verbonden.pack(side="right", padx=16)
+        self._lbl_verbonden.pack(side="right", padx=4)
         # Accentstreep onder header
         tk.Frame(self, bg=C_BTN, height=3).pack(fill="x", side="top")
 
@@ -324,19 +327,25 @@ class BkosInstaller(tk.Tk):
 
     def _bouw_links(self, parent):
         def sectie(titel):
-            tk.Label(parent, text=titel.upper(), bg=C_BG,
-                fg=C_LICHT, font=("Segoe UI", 8, "bold")).pack(
-                anchor="w", pady=(12, 2))
-            # Buitenste frame geeft de 4px groene linkerbalk
+            # 4px groene linkerbalk via buitenste frame
             outer = tk.Frame(parent, bg=C_BTN)
-            outer.pack(fill="x")
-            f = tk.Frame(outer, bg=C_SURFACE)
-            f.pack(fill="x", padx=(4, 0))
+            outer.pack(fill="x", pady=(10, 0))
+            card = tk.Frame(outer, bg=C_SURFACE)
+            card.pack(fill="x", padx=(4, 0))
+            # Titel met beige achtergrond in het vlak
+            tk.Label(card, text=titel.upper(), bg=C_SURFACE,
+                fg=C_DIM, font=("Segoe UI", 8, "bold"),
+                anchor="w").pack(fill="x", padx=12, pady=(7, 6))
+            # Dunne groene scheidingslijn titel / inhoud
+            tk.Frame(card, bg=C_BTN, height=1).pack(fill="x")
+            # Content-zone iets donkerder voor diepte-effect
+            f = tk.Frame(card, bg=C_PANEL)
+            f.pack(fill="x")
             return f
 
         def rij(parent):
             r = tk.Frame(parent, bg=C_SURFACE)
-            r.pack(fill="x", padx=12, pady=6)
+            r.pack(fill="x", padx=8, pady=4)
             return r
 
         def lbl(parent, tekst):
@@ -452,7 +461,7 @@ class BkosInstaller(tk.Tk):
 
         self._wifi_notitie = tk.Label(poort_frame,
             text="ℹ Schakel OTA-push in via het OTA-scherm op het apparaat.",
-            bg=C_SURFACE, fg=C_AMBER, font=("Segoe UI", 8),
+            bg=C_PANEL, fg=C_AMBER, font=("Segoe UI", 8),
             wraplength=300, justify="left")
         self._wifi_notitie.pack(anchor="w", padx=12, pady=(0, 6))
 
@@ -469,27 +478,33 @@ class BkosInstaller(tk.Tk):
         self._cb_mcu.bind("<<ComboboxSelected>>", self._on_mcu_override)
         tk.Label(mcu_frame,
             text="Overschrijft automatische detectie.",
-            bg=C_SURFACE, fg=C_DIM, font=("Segoe UI", 8)).pack(
+            bg=C_PANEL, fg=C_DIM, font=("Segoe UI", 8)).pack(
             anchor="w", padx=12, pady=(0, 6))
 
         # Init platforms
         self._on_fw_change()
 
     def _bouw_rechts(self, parent):
-        tk.Label(parent, text="LOG", bg=C_BG,
-            fg=C_LICHT, font=("Segoe UI", 8, "bold")).pack(anchor="w")
-
+        # Zelfde kaart-structuur als sectie(): groene linkerbalk + titel + scheidingslijn
         log_outer = tk.Frame(parent, bg=C_BTN)
-        log_outer.pack(fill="both", expand=True, pady=(2, 0))
-        log_frame = tk.Frame(log_outer, bg=C_SURFACE)
-        log_frame.pack(fill="both", expand=True, padx=(4, 0))
+        log_outer.pack(fill="both", expand=True)
+        log_card = tk.Frame(log_outer, bg=C_SURFACE)
+        log_card.pack(fill="both", expand=True, padx=(4, 0))
 
-        self._log_widget = scrolledtext.ScrolledText(log_frame,
+        tk.Label(log_card, text="LOG", bg=C_SURFACE, fg=C_DIM,
+            font=("Segoe UI", 8, "bold"), anchor="w").pack(
+            fill="x", padx=12, pady=(7, 6))
+        tk.Frame(log_card, bg=C_BTN, height=1).pack(fill="x")
+
+        log_content = tk.Frame(log_card, bg=C_PANEL)
+        log_content.pack(fill="both", expand=True)
+
+        self._log_widget = scrolledtext.ScrolledText(log_content,
             bg=C_SURFACE, fg=C_TEKST,
             font=("Consolas", 8), relief="flat",
             state="disabled", wrap="word",
             insertbackground=C_TEKST)
-        self._log_widget.pack(fill="both", expand=True, padx=6, pady=6)
+        self._log_widget.pack(fill="both", expand=True, padx=8, pady=8)
 
         # Log tags voor kleuren
         self._log_widget.tag_config("ok",  foreground=C_GROEN)

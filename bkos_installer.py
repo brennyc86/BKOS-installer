@@ -265,15 +265,24 @@ class BkosInstaller(tk.Tk):
             foreground=[("selected", C_CYAAN)])
 
         # ── Header ───────────────────────────────────────────────────────
-        hdr = tk.Frame(self, bg=C_SURFACE, height=48)
+        hdr = tk.Frame(self, bg=C_SURFACE, height=52)
         hdr.pack(fill="x", side="top")
         hdr.pack_propagate(False)
-        tk.Label(hdr, text="⚓  BKOS Installer",
-            bg=C_SURFACE, fg=C_CYAAN,
-            font=("Segoe UI", 13, "bold")).pack(side="left", padx=16, pady=10)
+        tk.Label(hdr, text="⚓", bg=C_SURFACE, fg=C_BTN,
+            font=("Segoe UI", 18)).pack(side="left", padx=(16, 6), pady=8)
+        hdr_tekst = tk.Frame(hdr, bg=C_SURFACE)
+        hdr_tekst.pack(side="left", pady=8)
+        tk.Label(hdr_tekst, text="BKOS Installer",
+            bg=C_SURFACE, fg=C_TEKST,
+            font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        tk.Label(hdr_tekst, text="Boordcomputer installatie hulpprogramma",
+            bg=C_SURFACE, fg=C_DIM,
+            font=("Segoe UI", 8)).pack(anchor="w")
         self._lbl_verbonden = tk.Label(hdr, text="", bg=C_SURFACE,
             fg=C_GROEN, font=("Segoe UI", 9))
         self._lbl_verbonden.pack(side="right", padx=16)
+        # Accentstreep onder header
+        tk.Frame(self, bg=C_BTN, height=3).pack(fill="x", side="top")
 
         # ── Hoofdgebied ───────────────────────────────────────────────────
         main = tk.Frame(self, bg=C_BG)
@@ -318,9 +327,11 @@ class BkosInstaller(tk.Tk):
             tk.Label(parent, text=titel.upper(), bg=C_BG,
                 fg=C_LICHT, font=("Segoe UI", 8, "bold")).pack(
                 anchor="w", pady=(12, 2))
-            f = tk.Frame(parent, bg=C_SURFACE,
-                highlightbackground=C_RAND, highlightthickness=1)
-            f.pack(fill="x")
+            # Buitenste frame geeft de 4px groene linkerbalk
+            outer = tk.Frame(parent, bg=C_BTN)
+            outer.pack(fill="x")
+            f = tk.Frame(outer, bg=C_SURFACE)
+            f.pack(fill="x", padx=(4, 0))
             return f
 
         def rij(parent):
@@ -468,9 +479,10 @@ class BkosInstaller(tk.Tk):
         tk.Label(parent, text="LOG", bg=C_BG,
             fg=C_LICHT, font=("Segoe UI", 8, "bold")).pack(anchor="w")
 
-        log_frame = tk.Frame(parent, bg=C_SURFACE,
-            highlightbackground=C_RAND, highlightthickness=1)
-        log_frame.pack(fill="both", expand=True, pady=(2, 0))
+        log_outer = tk.Frame(parent, bg=C_BTN)
+        log_outer.pack(fill="both", expand=True, pady=(2, 0))
+        log_frame = tk.Frame(log_outer, bg=C_SURFACE)
+        log_frame.pack(fill="both", expand=True, padx=(4, 0))
 
         self._log_widget = scrolledtext.ScrolledText(log_frame,
             bg=C_SURFACE, fg=C_TEKST,

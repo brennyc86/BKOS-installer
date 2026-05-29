@@ -43,16 +43,17 @@ except ImportError:
 
 # ─── Kleuren ──────────────────────────────────────────────────────────────
 
-C_BG      = "#0d1a0e"
-C_SURFACE = "#132016"
-C_PANEL   = "#1b2e1f"
-C_RAND    = "#2e4a32"
-C_CYAAN   = "#c8a870"   # warm beige/goud accent
-C_GROEN   = "#4caf50"
-C_ROOD    = "#e05c5c"
-C_AMBER   = "#d4a845"
-C_TEKST   = "#d6c8a0"   # warm beige tekst
-C_DIM     = "#7a6e58"
+C_BG      = "#1a2e1e"   # donker groen tussenruimte
+C_SURFACE = "#ede4c8"   # licht warm beige: panelen, header, footer
+C_PANEL   = "#ddd4b0"   # iets donkerder beige: invoervelden
+C_RAND    = "#8a7a50"   # warm bruin rand
+C_CYAAN   = "#3a7a3a"   # donker groen accent (highlights, tabs)
+C_GROEN   = "#2d7a35"   # OK groen (leesbaar op beige)
+C_ROOD    = "#b83030"   # fout rood
+C_AMBER   = "#9a6a00"   # amber waarschuwing
+C_TEKST   = "#1e2a18"   # donker tekst op lichte achtergrond
+C_DIM     = "#6a5e40"   # gedimde tekst op lichte achtergrond
+C_LICHT   = "#a8c490"   # lichte salie: tekst op donkere achtergrond
 C_BTN     = "#2d6333"
 C_BTN_HOV = "#3a7d40"
 
@@ -315,7 +316,7 @@ class BkosInstaller(tk.Tk):
     def _bouw_links(self, parent):
         def sectie(titel):
             tk.Label(parent, text=titel.upper(), bg=C_BG,
-                fg=C_DIM, font=("Segoe UI", 8, "bold")).pack(
+                fg=C_LICHT, font=("Segoe UI", 8, "bold")).pack(
                 anchor="w", pady=(12, 2))
             f = tk.Frame(parent, bg=C_SURFACE,
                 highlightbackground=C_RAND, highlightthickness=1)
@@ -465,7 +466,7 @@ class BkosInstaller(tk.Tk):
 
     def _bouw_rechts(self, parent):
         tk.Label(parent, text="LOG", bg=C_BG,
-            fg=C_DIM, font=("Segoe UI", 8, "bold")).pack(anchor="w")
+            fg=C_LICHT, font=("Segoe UI", 8, "bold")).pack(anchor="w")
 
         log_frame = tk.Frame(parent, bg=C_SURFACE,
             highlightbackground=C_RAND, highlightthickness=1)
@@ -713,6 +714,16 @@ class BkosInstaller(tk.Tk):
 
             self._stable_url_cache = url_map
             self._beta_sha_cache   = sha_map
+
+            # Bij incl. ontwikkeling: sorteer op versienummer nieuwste eerst
+            if incl_beta and alle_versies:
+                def _sleutel(v):
+                    try:
+                        d = v.split(".")
+                        return (int(d[2]), int(d[3]), int(d[0]), int(d[1]))
+                    except Exception:
+                        return (0, 0, 0, 0)
+                alle_versies.sort(key=_sleutel, reverse=True)
 
             if alle_versies:
                 self.after(0, lambda vs=alle_versies: [

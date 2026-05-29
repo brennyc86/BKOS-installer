@@ -41,6 +41,67 @@ try:
 except ImportError:
     MDNS_OK = False
 
+# ─── Ingebed zeilboot-icoon (256×256 PNG, base64) ────────────────────────
+
+ICON_PNG_B64 = (
+    "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"
+)
+
 # ─── Kleuren ──────────────────────────────────────────────────────────────
 
 C_BG      = "#1a2e1e"   # donker groen tussenruimte
@@ -232,7 +293,9 @@ class BkosInstaller(tk.Tk):
         self._actieve_tab = 0   # 0 = serieel, 1 = wifi
 
         try:
-            self.iconbitmap(self._bundle_pad("assets/icon.ico"))
+            import base64 as _b64, tkinter as _tk
+            _img = _tk.PhotoImage(data=ICON_PNG_B64)
+            self.wm_iconphoto(True, _img)
         except Exception:
             pass
 
@@ -327,20 +390,27 @@ class BkosInstaller(tk.Tk):
 
     def _bouw_links(self, parent):
         def sectie(titel):
-            # 4px groene linkerbalk via buitenste frame
+            # Buitenste frame: 4px groene linkerbalk
             outer = tk.Frame(parent, bg=C_BTN)
             outer.pack(fill="x", pady=(10, 0))
-            card = tk.Frame(outer, bg=C_SURFACE)
-            card.pack(fill="x", padx=(4, 0))
-            # Titel met beige achtergrond in het vlak
+            # Schaduwlaag: 2px donkerder beige zichtbaar rechts+onder (raised effect)
+            shadow = tk.Frame(outer, bg="#9a8a68")
+            shadow.pack(fill="x", padx=(4, 0))
+            card = tk.Frame(shadow, bg=C_SURFACE)
+            card.pack(fill="x", padx=(0, 2), pady=(0, 2))
+            # Titelregel: beige, klein, donkergroen + vet
             tk.Label(card, text=titel.upper(), bg=C_SURFACE,
-                fg=C_DIM, font=("Segoe UI", 8, "bold"),
-                anchor="w").pack(fill="x", padx=12, pady=(7, 6))
-            # Dunne groene scheidingslijn titel / inhoud
+                fg=C_BTN, font=("Segoe UI", 8, "bold"),
+                anchor="w").pack(fill="x", padx=10, pady=(4, 3))
+            # Dunne groene scheidingslijn
             tk.Frame(card, bg=C_BTN, height=1).pack(fill="x")
-            # Content-zone iets donkerder voor diepte-effect
+            # Inset schaduw boven content (sunken effect)
+            tk.Frame(card, bg="#9a8a68", height=1).pack(fill="x")
+            # Content-zone iets donkerder voor diepte
             f = tk.Frame(card, bg=C_PANEL)
             f.pack(fill="x")
+            # Highlight onderkant content (sunken effect completeren)
+            tk.Frame(card, bg="#f5edda", height=1).pack(fill="x", pady=(0, 3))
             return f
 
         def rij(parent):
@@ -485,16 +555,19 @@ class BkosInstaller(tk.Tk):
         self._on_fw_change()
 
     def _bouw_rechts(self, parent):
-        # Zelfde kaart-structuur als sectie(): groene linkerbalk + titel + scheidingslijn
+        # Zelfde 3D kaart-structuur als sectie()
         log_outer = tk.Frame(parent, bg=C_BTN)
         log_outer.pack(fill="both", expand=True)
-        log_card = tk.Frame(log_outer, bg=C_SURFACE)
-        log_card.pack(fill="both", expand=True, padx=(4, 0))
+        log_shadow = tk.Frame(log_outer, bg="#9a8a68")
+        log_shadow.pack(fill="both", expand=True, padx=(4, 0))
+        log_card = tk.Frame(log_shadow, bg=C_SURFACE)
+        log_card.pack(fill="both", expand=True, padx=(0, 2), pady=(0, 2))
 
-        tk.Label(log_card, text="LOG", bg=C_SURFACE, fg=C_DIM,
+        tk.Label(log_card, text="LOG", bg=C_SURFACE, fg=C_BTN,
             font=("Segoe UI", 8, "bold"), anchor="w").pack(
-            fill="x", padx=12, pady=(7, 6))
+            fill="x", padx=10, pady=(4, 3))
         tk.Frame(log_card, bg=C_BTN, height=1).pack(fill="x")
+        tk.Frame(log_card, bg="#9a8a68", height=1).pack(fill="x")
 
         log_content = tk.Frame(log_card, bg=C_PANEL)
         log_content.pack(fill="both", expand=True)

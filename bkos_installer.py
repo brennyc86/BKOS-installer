@@ -41,65 +41,49 @@ try:
 except ImportError:
     MDNS_OK = False
 
-# ─── Ingebed zeilboot-icoon (256×256 PNG, base64) ────────────────────────
+# ─── Ingebed BKOS-logo icoon (256×256 PNG, base64) ──────────────────────
 
 ICON_PNG_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAMOUlEQVR4nO3dv64bxxXH8aPAQKoA"
-    "BgQhyEOoEtK4UuPGdlq/gLqoSso0ghqXdqV0egG3cVyrUqfqPoSROlUqpZDXonhJ7szOOTPnz/cD"
-    "uLBg38td7u83Z5YUKQIAAAAAAAAAAAAAALJ4sPoBwMbjZ0/ea//Mu9fvuF6S4QkNyiLgoyiIeHjC"
-    "nPMY9F4Ug188Mc5kCPweCsEPnojFKgR+D4WwDid+AUJ/HWUwFyd7ktmhf/PylfrPfPriufrPvIUy"
-    "sMcJNmQZeouAj7IsCMrABidVmUXoPYa9lUUpUAZ6OJFKtIIfOeyttEqBIhjHCRxA6MdRBmtx0g4Y"
-    "DX7lwO8ZLQSKoA8nq8NI8Al9v5EyoAjacJIaEPy1KAI7nJwbjgaf0Ns5WgYUwWWclCuOhJ/gz3Ok"
-    "CCiB+zghZ3qDT+jX6y0DiuAjTsSvCH58FEG/8ieA4OdDEbQre+AifeEn+PH0FEHVEih50Kz6dTAN"
-    "3FbqYEVY9atiGriszIGKtIef4OfVWgRVSqDEQbLq4xTTwEepD06EVR/XMQ0kL4CW8BN8tBRB1hJI"
-    "eVCs+uhVdRr43eoHoI3w44jW6yHbJzqnajNGfmiotCVIMwEQfmhpuU6yTAIpCoDwQ1uVEgg9xhB8"
-    "zJB5SxDyQYsQ/iMef/Vt83979/OPho8knqwlEHILQPgxW9YtQbgCIPy6Hv750eqHEEbGEghVAIRf"
-    "F+Hvl60EPlv9AFrtnVSCj1m2a+3WfYHHz568j3BPIMQEQPj1sfqP27vuIkwC7guA8MOz6CXgugAI"
-    "vw1Wf12RS8B1AdxC+I8h/DaiXo9uC+BWa0Y92cjt1nXpdQpwWQCE3warv71oJeCuADyepAxGvmEX"
-    "erxd364KgJt+yCDSTUE3BUD47bD6zxelBNwUwC2EHxFFuG5dFAA3/eyw+q/l/abg8gIg/HYIvw+e"
-    "S2BpAaw+eMCDlTlYPgFcw+o/htXfF6/X87ICYPS3Q/h98rgVWFIAhN+Rz+WX1Q+hEm8lML0A2Pfb"
-    "YvWPbXY+XN0DYPVf4+GXj5gCJvJ0nU8tAEZ/W6z+cXjZCkwrAMJvazT8TAHzeSgBV1sAAHNNKQBW"
-    "f1taoz9TwHyrpwAmAKAw8wJg9belfeOPKWC+lVPAsgmA8I/jrn8eq/JgWgC86ScmpgBfLHNkVgCM"
-    "/rZY/fNZsRXgJmBAM8L/9IfnTAEFmBQAqz9wzOwpYOoEQPjHzRz9mQLWmJkT9QLgxh9gRztf0yYA"
-    "Vv9xK278MQWsMSsvqgXA6m+Hu/7YaOZsygTA6h8bU8AaM3KjVgCs/nZY/XFOK2/mEwCr/xgv4WcK"
-    "WMM6P7wRCChMpQAY/214Wf03TAG+aOTOdAJg/AfGWeZouABY/W14W/03TAG+jObPbAJg9T/Oa/ix"
-    "jlWeuAmIbkwBeQwVAOO/PlZ/9BrJockEwPifH1PAfBa5YgvgCKs/ZjtcANfGDlb/YyKGnylgvmv5"
-    "OroNYAIACqMAHIi4+m+YAmI7VACM/3oihx9raG4DmAAwjCkgLgpgIVZ/rNZdALz5B5cwBfjQm0+1"
-    "CYD9fx9Wf4zQyhtbgAWyhp8pIB4KACisqwB4+W9c1tV/wxQwj8bLgUwAQGEUwETZV/8NU0AcFMAk"
-    "VcKPWJoLgNf/0YMpYK3WvA5PANwA3MfqDyuj+WMLYKxy+JkC/KMAgMIoAEOVV/8NU4BvFABQWFMB"
-    "8A7Afqz+HzEF2Bp5RyATgAHCjygoAEzBFOATBaCM1R+RUACKCP9tTAH+UABAYRSAElb/NkwBvlAA"
-    "QGG7BcB7APax+vdhCtB39L0ATACDCD8iowCwBFOADxTAAFZ/REcBYBmmgPUogINY/ZEBBXAA4dfD"
-    "FLAWBQAURgF0YvXXxxSwDgXQgfAjGwoALjAFrEEBNGL1R0YUANxgCpiPAmjA6o+sKIAdhH8upoC5"
-    "KACgMArgBlb/NZgC5qEAriD8qIACgEtMAXNQABew+qMKCgBuMQXY2y2Au9fvHlz686yrZNbjQm7X"
-    "rttr+d0wAZwg/P4wBdiiAIDCKIBfsfr7xRRghwIACqMAhNU/AqYAG+ULgPCjsvIFgDiYAvQ1FUDW"
-    "9wJEf/yAyPH3AIgUngAIf0xMAbrKFgCAogXA6h8bU4CekgUA4IPhAoi2mkZ7vLiMKeCD0eu5uQBa"
-    "7ih6R/hRRWte2QIgLKaAcWUKgNUfuK9EARD+vJgCxnQVQNZ3BAIRjbwDcJN+AqCc8mMKOC59AQC4"
-    "Tq0APK60Hh8TbFSbArSu7c96/4e71+8ePH725L3Kbzf25uWrT/6dQkB2ve/XKbUFePPy1W//IJ9q"
-    "U4CG7gkgC6YDQOTw23uvbQOyrK5lCuFzSbdqvvnbqz+tfgyWNF7+25SdAPacFlmZMkA5FEADtgux"
-    "PP3h+S/ZpwAtQ3/DL/s2oFXoQki4BRDJuw3QHP9Fir0KYIVXF/zhFYE2JluApy+elw0D2wVYsbiW"
-    "hj/kg21AH3eFkHQLsMm0FdAe/0W4CTgdry7AE7MJQIQpoNeSQkg+AYjkmAJuXRtLJ4BIfzfAO6YD"
-    "9Br9rE6VD/pkCrBnVggFJgCR2FOA1eovonQPgCnAHq8u4JzGJ3VzEzAotguxV3Uv1D7rn22AH12F"
-    "4GgLQKDvsxz/RRQnALYB8z3+6luNH6MSuodfPrpYJITahtYX9ah+2w9TwHFKYQ7l7ucfVz8E16xX"
-    "fxHlewBMAZdVDHeLlvNCSdyn+TV96t/3V3kKIOjzZC+GGau/iMGrAFWmAMK+1qXzn70URPS/pNfk"
-    "G3+zTQGEPa6IpTBr9RcxKgCR2CVA4PPyXggzwy/CG4F+Q+hrOH2evZfBDGYTgIj/KYDQY+OhDGav"
-    "/iLGE4DHG4KEHpd4ngyswi9iPAGI+JkCCD56zSyCFau/yIQCEFlbAgQfo6yLYFX4RZJ/KjDhh4bM"
-    "19GUCUBk7hSQ+QnDWtrTwMrVXyTRy4CEHjN4vll4xLQtwK02q/qBFqht9eovMvkeACUAfOAh/CLO"
-    "bgJSAqjA03U+vQBmthsQzex8LJkA2AqgKi+j/2bZFoASQDXewi/i7B7AKUoAmXi9npcWAPcDgLU5"
-    "WD4BsBVAdh5H/83yAhChBJCX5/CLOCmAPZQAIopw3bopgL02jHAygc3e9eph9RdxVAAilAByiBJ+"
-    "EWcFIOLr5ADavF3f7gpAhJuCiMv7Tb9zLgtAhBJAPNHCLzLxE4GO2PtEYavPE+TDRfKy+hCPSPv+"
-    "Uy4f1KlVJfDJY6AQwprxqT1Rwy8SoABEfJTAOUrBnxUf0RU5/CJBCkDEZwmcoxTm8fB5fNHDLxKo"
-    "AET2S0DERxGcoxiO8xD0cy03oSOEXyRYAYjELYE9FUvCY7j3ZAq/SMACEMlbAr08lUbEMPfKFn6R"
-    "oAUgQglgrozhF1lYAF/844ufev77t9+9/eb8z7RL4C///Pu/ex7Tv/76/deWP0cTx/ZR72PKGn6R"
-    "4N8MtJ30W0WwPXlMA+iVOfibZW8FvrSi33JrYmh5EvaeTM1VpHeF6f3dvTi2j1off4XwiwSbALYS"
-    "uFQed6/fPdjbEjx98fzeJGB9gbbaHofmyMyxHVMl/CIObgL23gs4dfS+gIjIH/74+8MXUOuFPHKR"
-    "joRlxu/NeGytf8ksS/hFHBSAyFgJnHv73dtvLEtg5Qh86Xdb//xbMh1bxfCLOCmAjWYRiIj89z//"
-    "272gW0tgdHz1Mo5fUv3YKo3851welGYRtJSAyPUi0H4Zy1NYqh9b1VX/lPsD0yiD1hIQ+VAEM167"
-    "FlkTGI6t7wNlModfJEABnBsphNYiWPWeAYvQzAr8Hi/Hxqr/qRIHear1BqEIbx7KhFX/sjIHeqqn"
-    "BEQogsh6Pz+yUvhFihbAhmkgN1b9fSUP+hTTQD6s+u3KHvg5iiA+gt+v/Ak4RxHEQ/CP40Rc0VsE"
-    "IpTBTEe+HIbg38cJueFICYhQBJaOfisU4b+Mk9LgaBGIUAYaRr4KjuDfxsnpQBHMRfDtcZIOGCkC"
-    "EcrgltEvfiX4fThZA0aLYFO5ELS+6ZngH8NJU0IZtCP0fnAClWkVwanIpaAV9lMEXw8n0pBFGWw8"
-    "loJF2DeE3gYndRLLMrjEoiAsA34JobfHCV5gdhlEQujn4mQvRhkQ+pU48c5UKAQC7wdPhHMZCoHA"
-    "+8UTE5THYiDo8fCEJWVREAQcAAAAAAAAAAAAANz7P7aJ7MbsIIZeAAAAAElFTkSuQmCC"
+    "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"
+    "AAAAAElFTkSuQmCC"
 )
 
 # ─── Kleuren ──────────────────────────────────────────────────────────────
@@ -114,7 +98,8 @@ C_ROOD    = "#b83030"   # fout rood
 C_AMBER   = "#9a6a00"   # amber waarschuwing
 C_TEKST   = "#1e2a18"   # donker tekst op lichte achtergrond
 C_DIM     = "#6a5e40"   # gedimde tekst op lichte achtergrond
-C_LICHT   = "#a8c490"   # lichte salie: tekst op donkere achtergrond
+C_SCHADUUW = "#6a5a38"   # 3D schaduw: donker warm bruin
+C_GLANS    = "#f5edd8"   # 3D glans: licht crème
 C_BTN     = "#2d6333"
 C_BTN_HOV = "#3a7d40"
 
@@ -390,27 +375,30 @@ class BkosInstaller(tk.Tk):
 
     def _bouw_links(self, parent):
         def sectie(titel):
-            # Buitenste frame: 4px groene linkerbalk
+            # 4px groene linkerbalk via outer frame
             outer = tk.Frame(parent, bg=C_BTN)
             outer.pack(fill="x", pady=(10, 0))
-            # Schaduwlaag: 2px donkerder beige zichtbaar rechts+onder (raised effect)
-            shadow = tk.Frame(outer, bg="#9a8a68")
-            shadow.pack(fill="x", padx=(4, 0))
-            card = tk.Frame(shadow, bg=C_SURFACE)
-            card.pack(fill="x", padx=(0, 2), pady=(0, 2))
-            # Titelregel: beige, klein, donkergroen + vet
+            # Schaduwlaag: zichtbaar rechts+onder (raised card effect)
+            schaduw = tk.Frame(outer, bg=C_SCHADUUW)
+            schaduw.pack(fill="x", padx=(4, 0))
+            # Glanslaag: zichtbaar links+boven (raised card effect)
+            glans = tk.Frame(schaduw, bg=C_GLANS)
+            glans.pack(fill="x", padx=(0, 3), pady=(0, 3))
+            # Kaart zelf
+            card = tk.Frame(glans, bg=C_SURFACE)
+            card.pack(fill="x", padx=(1, 0), pady=(1, 0))
+            # Titelregel: compact, donkergroen + vet
             tk.Label(card, text=titel.upper(), bg=C_SURFACE,
                 fg=C_BTN, font=("Segoe UI", 8, "bold"),
                 anchor="w").pack(fill="x", padx=10, pady=(4, 3))
-            # Dunne groene scheidingslijn
+            # Groene scheidingslijn
             tk.Frame(card, bg=C_BTN, height=1).pack(fill="x")
-            # Inset schaduw boven content (sunken effect)
-            tk.Frame(card, bg="#9a8a68", height=1).pack(fill="x")
-            # Content-zone iets donkerder voor diepte
+            # Inset schaduw boven content-zone (sunken effect)
+            tk.Frame(card, bg=C_SCHADUUW, height=1).pack(fill="x")
             f = tk.Frame(card, bg=C_PANEL)
             f.pack(fill="x")
-            # Highlight onderkant content (sunken effect completeren)
-            tk.Frame(card, bg="#f5edda", height=1).pack(fill="x", pady=(0, 3))
+            # Glans onder content-zone (sunken effect afronden)
+            tk.Frame(card, bg=C_GLANS, height=1).pack(fill="x", pady=(0, 4))
             return f
 
         def rij(parent):
@@ -558,16 +546,18 @@ class BkosInstaller(tk.Tk):
         # Zelfde 3D kaart-structuur als sectie()
         log_outer = tk.Frame(parent, bg=C_BTN)
         log_outer.pack(fill="both", expand=True)
-        log_shadow = tk.Frame(log_outer, bg="#9a8a68")
-        log_shadow.pack(fill="both", expand=True, padx=(4, 0))
-        log_card = tk.Frame(log_shadow, bg=C_SURFACE)
-        log_card.pack(fill="both", expand=True, padx=(0, 2), pady=(0, 2))
+        log_schaduw = tk.Frame(log_outer, bg=C_SCHADUUW)
+        log_schaduw.pack(fill="both", expand=True, padx=(4, 0))
+        log_glans = tk.Frame(log_schaduw, bg=C_GLANS)
+        log_glans.pack(fill="both", expand=True, padx=(0, 3), pady=(0, 3))
+        log_card = tk.Frame(log_glans, bg=C_SURFACE)
+        log_card.pack(fill="both", expand=True, padx=(1, 0), pady=(1, 0))
 
         tk.Label(log_card, text="LOG", bg=C_SURFACE, fg=C_BTN,
             font=("Segoe UI", 8, "bold"), anchor="w").pack(
             fill="x", padx=10, pady=(4, 3))
         tk.Frame(log_card, bg=C_BTN, height=1).pack(fill="x")
-        tk.Frame(log_card, bg="#9a8a68", height=1).pack(fill="x")
+        tk.Frame(log_card, bg=C_SCHADUUW, height=1).pack(fill="x")
 
         log_content = tk.Frame(log_card, bg=C_PANEL)
         log_content.pack(fill="both", expand=True)

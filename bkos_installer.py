@@ -57,42 +57,63 @@ HEADER_LOGO_B64 = (
 )
 
 ICON_PNG_B64 = (
-    "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"
-    "yT+lpYcoOduECQAAAABJRU5ErkJggg=="
+    "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"
 )
 
 # ─── Kleuren ──────────────────────────────────────────────────────────────
@@ -395,27 +416,18 @@ class BkosInstaller(tk.Tk):
             # 4px groene linkerbalk via outer frame
             outer = tk.Frame(parent, bg=C_BTN)
             outer.pack(fill="x", pady=(10, 0))
-            # Schaduwlaag: zichtbaar rechts+onder (raised card effect)
-            schaduw = tk.Frame(outer, bg=C_SCHADUUW)
-            schaduw.pack(fill="x", padx=(4, 0))
-            # Glanslaag: zichtbaar links+boven (raised card effect)
-            glans = tk.Frame(schaduw, bg=C_GLANS)
-            glans.pack(fill="x", padx=(0, 3), pady=(0, 3))
-            # Kaart zelf
-            card = tk.Frame(glans, bg=C_SURFACE)
-            card.pack(fill="x", padx=(1, 0), pady=(1, 0))
-            # Titelregel: compact, donkergroen + vet
+            # Kaart: relief="raised" geeft ingebouwde 3D (highlight + schaduw)
+            card = tk.Frame(outer, bg=C_SURFACE, bd=3, relief="raised")
+            card.pack(fill="x", padx=(4, 0))
+            # Titelregel: donkergroen + vet
             tk.Label(card, text=titel.upper(), bg=C_SURFACE,
                 fg=C_BTN, font=("Segoe UI", 8, "bold"),
                 anchor="w").pack(fill="x", padx=10, pady=(4, 3))
             # Groene scheidingslijn
             tk.Frame(card, bg=C_BTN, height=1).pack(fill="x")
-            # Inset schaduw boven content-zone (sunken effect)
-            tk.Frame(card, bg=C_SCHADUUW, height=2).pack(fill="x")
-            f = tk.Frame(card, bg=C_PANEL)
-            f.pack(fill="x")
-            # Glans onder content-zone (sunken effect afronden)
-            tk.Frame(card, bg=C_GLANS, height=2).pack(fill="x", pady=(0, 4))
+            # Content-zone: relief="sunken" geeft ingedrukt effect
+            f = tk.Frame(card, bg=C_PANEL, bd=2, relief="sunken")
+            f.pack(fill="x", padx=6, pady=(5, 6))
             return f
 
         def rij(parent):
@@ -563,21 +575,16 @@ class BkosInstaller(tk.Tk):
         # Zelfde 3D kaart-structuur als sectie()
         log_outer = tk.Frame(parent, bg=C_BTN)
         log_outer.pack(fill="both", expand=True, pady=(10, 0))
-        log_schaduw = tk.Frame(log_outer, bg=C_SCHADUUW)
-        log_schaduw.pack(fill="both", expand=True, padx=(4, 0))
-        log_glans = tk.Frame(log_schaduw, bg=C_GLANS)
-        log_glans.pack(fill="both", expand=True, padx=(0, 4), pady=(0, 4))
-        log_card = tk.Frame(log_glans, bg=C_SURFACE)
-        log_card.pack(fill="both", expand=True, padx=(2, 0), pady=(2, 0))
+        log_card = tk.Frame(log_outer, bg=C_SURFACE, bd=3, relief="raised")
+        log_card.pack(fill="both", expand=True, padx=(4, 0))
 
         tk.Label(log_card, text="LOG", bg=C_SURFACE, fg=C_BTN,
             font=("Segoe UI", 8, "bold"), anchor="w").pack(
             fill="x", padx=10, pady=(4, 3))
         tk.Frame(log_card, bg=C_BTN, height=1).pack(fill="x")
-        tk.Frame(log_card, bg=C_SCHADUUW, height=2).pack(fill="x")
 
-        log_content = tk.Frame(log_card, bg=C_PANEL)
-        log_content.pack(fill="both", expand=True)
+        log_content = tk.Frame(log_card, bg=C_PANEL, bd=2, relief="sunken")
+        log_content.pack(fill="both", expand=True, padx=6, pady=(5, 6))
 
         self._log_widget = scrolledtext.ScrolledText(log_content,
             bg=C_SURFACE, fg=C_TEKST,
@@ -1375,11 +1382,17 @@ class BkosInstaller(tk.Tk):
 
     def _stel_min_hoogte_in(self):
         self.update_idletasks()
-        # Meet de vereiste hoogte van de linker kolom (bevat alle panelen)
-        links_h = self._left_frame.winfo_reqheight() if hasattr(self, '_left_frame') else 0
-        # Voeg header (64) + accentstreep (3) + footer (56) + marge (24) toe
-        min_h = max(560, links_h + 64 + 3 + 56 + 24)
-        self.minsize(640, min_h)
+        # Bereken minimum op basis van werkelijke content-hoogte linker kolom
+        if hasattr(self, '_left_frame'):
+            # Som van directe kinderen (de sectie-frames)
+            hoogte = sum(
+                w.winfo_reqheight()
+                for w in self._left_frame.winfo_children()
+            ) + 24  # marge boven+onder
+        else:
+            hoogte = 450
+        min_h = hoogte + 64 + 3 + 56  # + header + streep + footer
+        self.minsize(640, max(580, min_h))
 
     def on_close(self):
         if self._zconf:

@@ -1004,41 +1004,57 @@ class BkosInstaller(tk.Tk):
         self._set_status(f"Flashing {port}...")
         self._set_progress(45)
 
-        esptool_args = [
-            "--chip",  chip,
-            "--port",  port,
-            "--baud",  baud,
-            "--before", "default_reset",
-            "--after",  "hard_reset",
-            "write_flash", "-z", addr, firmware_pad
-        ]
+        # Maak tijdelijk OTA-data reset bestand (8KB van 0xFF).
+        # Na OTA-update start ESP32 van ota_0/ota_1 partitie, niet factory.
+        # Door otadata (0xE000, 8KB) te wissen boot de bootloader opnieuw van
+        # factory (0x10000) waar de nieuwe firmware naartoe geschreven wordt.
+        otadata_fd, otadata_pad = tempfile.mkstemp(suffix="_otadata_reset.bin")
+        try:
+            with os.fdopen(otadata_fd, "wb") as f:
+                f.write(b"\xff" * 8192)
 
-        if getattr(sys, "frozen", False):
-            # PyInstaller .exe: gebruik module-API (stub-bestanden via --collect-data)
-            try:
-                import esptool
-                def _voortgang(pct):
-                    self._set_progress(45 + int(pct * 0.55))
-                old_stdout = sys.stdout
-                sys.stdout = _EsptoolCapture(self, _voortgang)
+            esptool_args = [
+                "--chip",  chip,
+                "--port",  port,
+                "--baud",  baud,
+                "--before", "default_reset",
+                "--after",  "hard_reset",
+                "write_flash", "-z",
+                "0xe000", otadata_pad,  # OTA boot-selectie wissen → factory
+                addr,       firmware_pad
+            ]
+
+            if getattr(sys, "frozen", False):
+                # PyInstaller .exe: gebruik module-API (stub-bestanden via --collect-data)
                 try:
-                    esptool.main(esptool_args)
-                finally:
-                    sys.stdout = old_stdout
-                self._log("✅ Flash geslaagd!", "ok")
-                self._set_progress(100)
-            except SystemExit as e:
-                if str(e) != "0":
+                    import esptool
+                    def _voortgang(pct):
+                        self._set_progress(45 + int(pct * 0.55))
+                    old_stdout = sys.stdout
+                    sys.stdout = _EsptoolCapture(self, _voortgang)
+                    try:
+                        esptool.main(esptool_args)
+                    finally:
+                        sys.stdout = old_stdout
+                    self._log("✅ Flash geslaagd!", "ok")
+                    self._set_progress(100)
+                except SystemExit as e:
+                    if str(e) != "0":
+                        self._log(f"esptool fout: {e}", "err")
+                except Exception as e:
                     self._log(f"esptool fout: {e}", "err")
-            except Exception as e:
-                self._log(f"esptool fout: {e}", "err")
-        else:
-            # Dev-modus: subprocess via python -m esptool
-            # (vindt stub-bestanden altijd correct via module-pad)
-            cmd = [sys.executable, "-m", "esptool"] + esptool_args
-            ok = self._run_subprocess(cmd, 45, 55)
-            if not ok:
-                self._log("→ Als de poort bezet is: sluit Arduino IDE / wacht 5s en probeer opnieuw.", "dim")
+            else:
+                # Dev-modus: subprocess via python -m esptool
+                # (vindt stub-bestanden altijd correct via module-pad)
+                cmd = [sys.executable, "-m", "esptool"] + esptool_args
+                ok = self._run_subprocess(cmd, 45, 55)
+                if not ok:
+                    self._log("→ Als de poort bezet is: sluit Arduino IDE / wacht 5s en probeer opnieuw.", "dim")
+        finally:
+            try:
+                os.unlink(otadata_pad)
+            except OSError:
+                pass
 
     # ─── WiFi OTA flashing ────────────────────────────────────────────────
 
@@ -1453,3 +1469,4 @@ if __name__ == "__main__":
     app = BkosInstaller()
     app.protocol("WM_DELETE_WINDOW", app.on_close)
     app.mainloop()
+

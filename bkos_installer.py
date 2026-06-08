@@ -930,20 +930,25 @@ class BkosInstaller(tk.Tk):
             if versie in self._stable_url_cache:
                 # Stabiele release via releases.json URL
                 url    = self._stable_url_cache[versie]
-                naam   = url.split("/")[-1]
+                # Versie in de bestandsnaam → elk versienummer krijgt een eigen
+                # temp-bestand, zodat nooit een oude download wordt hergebruikt.
+                naam   = f"{versie}_{url.split('/')[-1]}"
                 lokaal = self._download(url, naam)
 
             elif versie in self._beta_sha_cache:
-                # Ontwikkelversie via commit SHA
+                # Ontwikkelversie via commit SHA (SHA maakt de naam al uniek)
                 sha = self._beta_sha_cache[versie]
                 url = f"{RAW_BASE}/{repo}/{sha}/{bin_rel}"
-                naam   = os.path.basename(bin_rel)
+                naam   = f"{sha[:8]}_{os.path.basename(bin_rel)}"
                 lokaal = self._download(url, naam)
 
             else:
-                # Laatste build fallback (BKOS-blanco of cache verlopen)
+                # Laatste build fallback (BKOS-blanco of cache verlopen):
+                # nooit cachen, want de main-branch bin verandert zonder dat
+                # de URL wijzigt.
                 url    = f"{RAW_BASE}/{repo}/{branch}/{bin_rel}"
-                lokaal = self._download(url, os.path.basename(bin_rel))
+                lokaal = self._download(url, os.path.basename(bin_rel),
+                                        forceer_vers=True)
 
             if not lokaal:
                 return
@@ -961,8 +966,10 @@ class BkosInstaller(tk.Tk):
 
     # ─── Download ─────────────────────────────────────────────────────────
 
-    def _download(self, url, naam):
-        if url in self._download_cache:
+    def _download(self, url, naam, forceer_vers=False):
+        # Cache alleen gebruiken als de URL stabiel naar dezelfde inhoud wijst
+        # (tag-URL of commit-SHA). Bij forceer_vers (main-branch) altijd opnieuw.
+        if not forceer_vers and url in self._download_cache:
             pad = self._download_cache[url]
             if os.path.exists(pad):
                 self._log(f"Cache: {naam}", "dim")

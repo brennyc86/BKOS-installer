@@ -41,6 +41,12 @@ try:
 except ImportError:
     MDNS_OK = False
 
+try:
+    import websocket  # websocket-client — voor de pincode-stap ná een volledige herinstallatie
+    WEBSOCKET_OK = True
+except ImportError:
+    WEBSOCKET_OK = False
+
 # ─── Ingebedde afbeeldingen (PNG, base64) ───────────────────────────────
 
 HEADER_LOGO_B64 = (
@@ -578,6 +584,11 @@ CATALOG = {
                 "ser_addr":       "0x10000",
                 "baud":           "921600",
                 "ota_port":       3232,
+                # Alleen voor "Volledige herinstallatie" (nieuwe FATFS-
+                # partitietabel) — arduino-cli produceert deze twee toch al,
+                # build.yml publiceert ze sinds de FATFS-migratie mee.
+                "bootloader_bin": "firmware/bkos_esp32s3_8048s070.bootloader.bin",
+                "partitions_bin": "firmware/bkos_esp32s3_8048s070.partitions.bin",
             },
             "ESP32 WROOM  ·  2.8\" 2432": {
                 "versie_bestand": "firmware/versie_wroom.txt",
@@ -995,6 +1006,44 @@ class BkosInstaller(tk.Tk):
             bg=C_PANEL, fg=C_DIM, font=("Segoe UI", 8)).pack(
             anchor="w", padx=12, pady=(0, 6))
 
+        # ── Volledige herinstallatie ─────────────────────────────────────────
+        # Schrijft ook de bootloader + partitietabel (nieuw, groter FATFS-
+        # bestandssysteem i.p.v. het krappere/onbetrouwbaardere SPIFFS) —
+        # alleen mogelijk/zinvol op ESP32-S3 via USB (serieel), en uitsluitend
+        # eenmalig nodig per apparaat. Zie _start_installatie() voor de
+        # validatie en _flash_esptool() voor de daadwerkelijke extra writes.
+        vh_frame = sectie("Volledige herinstallatie  (alleen ESP32-S3, USB)")
+        r_vh = rij(vh_frame)
+        self._var_vol_herinstall = tk.BooleanVar(value=False)
+        tk.Checkbutton(r_vh,
+            text="Nieuw bestandssysteem (FATFS) — wist alles",
+            variable=self._var_vol_herinstall,
+            bg=C_SURFACE, fg=C_ROOD, selectcolor=C_PANEL,
+            activebackground=C_SURFACE, activeforeground=C_ROOD,
+            font=("Segoe UI", 9),
+            command=self._on_vol_herinstall_toggle).pack(side="left")
+
+        r_vh2 = rij(vh_frame)
+        lbl(r_vh2, "Nieuwe pin:").pack(side="left")
+        self._var_nieuwe_pin = tk.StringVar()
+        self._ent_nieuwe_pin = tk.Entry(r_vh2, textvariable=self._var_nieuwe_pin,
+            bg=C_PANEL, fg=C_TEKST, insertbackground=C_TEKST, width=8,
+            relief="flat", font=("Consolas", 9), state="disabled")
+        self._ent_nieuwe_pin.pack(side="left")
+
+        tk.Label(vh_frame,
+            text="Schrijft ook bootloader + partitietabel opnieuw. Wist foto's, WiFi-instellingen, "
+                 "gasten-pincodes, kanaalnamen en meldingsinstellingen. Geen weg terug.",
+            bg=C_PANEL, fg=C_DIM, font=("Segoe UI", 8),
+            wraplength=300, justify="left").pack(anchor="w", padx=12, pady=(2, 4))
+
+        self._btn_pin_instellen = tk.Button(vh_frame,
+            text="🔑 Pincode instellen (ná flashen, via hotspot)",
+            bg=C_RAND, fg=C_TEKST, relief="flat", font=("Segoe UI", 8), cursor="hand2",
+            activebackground=C_RAND, activeforeground=C_CYAAN,
+            state="disabled", command=self._pincode_instellen)
+        self._btn_pin_instellen.pack(anchor="w", padx=12, pady=(0, 6))
+
         # Init platforms
         self._on_fw_change()
 
@@ -1021,10 +1070,11 @@ class BkosInstaller(tk.Tk):
         self._log_widget.pack(fill="both", expand=True, padx=8, pady=8)
 
         # Log tags voor kleuren
-        self._log_widget.tag_config("ok",  foreground=C_GROEN)
-        self._log_widget.tag_config("err", foreground=C_ROOD)
-        self._log_widget.tag_config("dim", foreground=C_DIM)
-        self._log_widget.tag_config("hl",  foreground=C_CYAAN)
+        self._log_widget.tag_config("ok",   foreground=C_GROEN)
+        self._log_widget.tag_config("err",  foreground=C_ROOD)
+        self._log_widget.tag_config("dim",  foreground=C_DIM)
+        self._log_widget.tag_config("hl",   foreground=C_CYAAN)
+        self._log_widget.tag_config("warn", foreground=C_AMBER)
 
         tk.Button(parent, text="Log wissen",
             bg=C_PANEL, fg=C_DIM, relief="raised", bd=2,
@@ -1077,6 +1127,11 @@ class BkosInstaller(tk.Tk):
         val = self._var_mcu_override.get()
         if val != "(automatisch)":
             self._var_platform.set(val)
+
+    def _on_vol_herinstall_toggle(self):
+        aan = self._var_vol_herinstall.get()
+        self._ent_nieuwe_pin.config(state="normal" if aan else "disabled")
+        self._btn_pin_instellen.config(state="normal" if aan else "disabled")
 
     def _on_com_select(self, event=None):
         label = self._var_com.get()
@@ -1332,6 +1387,25 @@ class BkosInstaller(tk.Tk):
                 "Gebruik de seriële modus (BOOTSEL-modus).")
             return
 
+        # ── Volledige herinstallatie: alleen ESP32-S3/BKOS-NUI via USB ──────
+        if self._var_vol_herinstall.get():
+            if methode != "serieel" or not plat.get("bootloader_bin") or not plat.get("partitions_bin"):
+                messagebox.showerror("Volledige herinstallatie",
+                    "Dit is alleen mogelijk voor BKOS-NUI op de ESP32-S3, via USB (serieel).")
+                return
+            nieuwe_pin = self._var_nieuwe_pin.get().strip()
+            if not re.fullmatch(r"[0-9]{4}", nieuwe_pin):
+                messagebox.showerror("Pincode",
+                    "Vul een nieuwe pincode van precies 4 cijfers in.")
+                self._ent_nieuwe_pin.focus_set()
+                return
+            if not messagebox.askyesno("Volledige herinstallatie bevestigen",
+                    "Dit wist ALLE op het apparaat opgeslagen bestanden "
+                    "(foto's, WiFi-instellingen, gasten-pincodes, kanaalnamen, "
+                    "meldingsinstellingen) en zet een nieuw bestandssysteem neer.\n\n"
+                    "Er is geen weg terug. Doorgaan?"):
+                return
+
         self._btn_install.config(state="disabled")
         self._progressbar["value"] = 0
         self._flash_thread = threading.Thread(
@@ -1381,13 +1455,33 @@ class BkosInstaller(tk.Tk):
             if not lokaal:
                 return
 
+            # Volledige herinstallatie: bootloader + partitietabel erbij halen.
+            # Altijd van de main-branch (nooit gecachet) — die twee wijzigen
+            # vrijwel nooit tussen firmwareversies, dus geen reden om ze aan
+            # het gekozen versiekanaal van de app zelf te koppelen.
+            bootloader_pad = partitions_pad = None
+            if self._var_vol_herinstall.get():
+                bl_rel = plat.get("bootloader_bin")
+                pt_rel = plat.get("partitions_bin")
+                if not bl_rel or not pt_rel:
+                    self._log("Volledige herinstallatie niet beschikbaar voor dit platform.", "err")
+                    return
+                bootloader_pad = self._download(f"{RAW_BASE}/{repo}/{branch}/{bl_rel}",
+                                                 os.path.basename(bl_rel), forceer_vers=True)
+                partitions_pad = self._download(f"{RAW_BASE}/{repo}/{branch}/{pt_rel}",
+                                                 os.path.basename(pt_rel), forceer_vers=True)
+                if not bootloader_pad or not partitions_pad:
+                    self._log("Kon bootloader/partitietabel niet downloaden.", "err")
+                    return
+
             chip = plat.get("chip", "")
             if chip == "pico":
                 self._flash_pico(lokaal)
             elif methode == "wifi":
                 self._flash_ota(host, lokaal, plat.get("ota_port", 3232))
             else:
-                self._flash_esptool(host, lokaal, plat)
+                self._flash_esptool(host, lokaal, plat,
+                                     bootloader_pad=bootloader_pad, partitions_pad=partitions_pad)
         finally:
             self.after(0, lambda: self._btn_install.config(state="normal"))
             self.after(0, lambda: self._set_status("Gereed"))
@@ -1430,12 +1524,14 @@ class BkosInstaller(tk.Tk):
 
     # ─── Serieel flashing (esptool) ───────────────────────────────────────
 
-    def _flash_esptool(self, port, firmware_pad, plat):
+    def _flash_esptool(self, port, firmware_pad, plat, bootloader_pad=None, partitions_pad=None):
         chip = plat.get("chip", "esp32")
         baud = plat.get("baud", "921600")
         addr = plat.get("ser_addr", "0x10000")
+        vol_herinstall = bootloader_pad is not None and partitions_pad is not None
 
-        self._log(f"Serieel flashing: {port}  chip={chip}  adres={addr}")
+        self._log(f"Serieel flashing: {port}  chip={chip}  adres={addr}"
+                   + ("  (volledige herinstallatie)" if vol_herinstall else ""))
         self._set_status(f"Flashing {port}...")
         self._set_progress(45)
 
@@ -1455,6 +1551,12 @@ class BkosInstaller(tk.Tk):
                 "--before", "default_reset",
                 "--after",  "hard_reset",
                 "write_flash", "-z",
+            ]
+            if vol_herinstall:
+                # Zelfde offsets als arduino-cli's eigen esptool write_flash
+                # voor esp32s3: bootloader @0x0, partitietabel @0x8000.
+                esptool_args += ["0x0", bootloader_pad, "0x8000", partitions_pad]
+            esptool_args += [
                 "0xe000", otadata_pad,  # OTA boot-selectie wissen → factory
                 addr,       firmware_pad
             ]
@@ -1490,6 +1592,89 @@ class BkosInstaller(tk.Tk):
                 os.unlink(otadata_pad)
             except OSError:
                 pass
+
+    # ─── Pincode instellen ná een volledige herinstallatie ─────────────────
+    # Een net herinstalleerd apparaat heeft geen WiFi-instellingen meer (die
+    # stonden ook op de gewiste data-partitie) en start daarom vanzelf zijn
+    # tijdelijke open hotspot + webapp op het vaste adres 192.168.4.1. De
+    # fabriekspincode "0000" (screen_config.ino, gebruikt zodra er nog geen
+    # pincode-bestand bestaat) wordt hier gebruikt om in te loggen en meteen
+    # naar de zelfgekozen pincode te wijzigen — hergebruikt gewoon de
+    # bestaande auth/pin_wijzig-websocketcommando's, geen nieuwe firmware-
+    # functionaliteit nodig. Vereist wél dat deze computer eerst zelf met
+    # dat hotspot-netwerk verbonden is — dat kan de installer niet voor je
+    # doen (Windows biedt geen veilige manier om dat vanuit een los
+    # programma te forceren zonder het eerst als vertrouwd netwerk te
+    # registreren).
+    def _pincode_instellen(self):
+        pin = self._var_nieuwe_pin.get().strip()
+        if not re.fullmatch(r"[0-9]{4}", pin):
+            messagebox.showerror("Pincode", "Vul eerst een pincode van precies 4 cijfers in.")
+            return
+        if not WEBSOCKET_OK:
+            messagebox.showerror("Pincode",
+                "De 'websocket-client'-module ontbreekt.\n"
+                "Open in plaats daarvan http://192.168.4.1/ handmatig en wijzig "
+                "de pincode via INSTELLINGEN → TOEGANG (huidige pincode: 0000).")
+            return
+        self._btn_pin_instellen.config(state="disabled")
+        threading.Thread(target=self._pincode_instellen_thread, args=(pin,), daemon=True).start()
+
+    def _pincode_instellen_thread(self, pin):
+        # De server pusht bij het verbinden altijd eerst een reeks losse
+        # statusberichten (io_full/state/net/info/paneel/lampen) vóórdat een
+        # client zelf iets gestuurd heeft — daarom hier op het "t"-veld
+        # filteren i.p.v. aan te nemen dat het EERSTVOLGENDE bericht het
+        # antwoord op de zojuist verstuurde opdracht is.
+        def _wacht_op(ws, verwacht_types, deadline):
+            while time.time() < deadline:
+                resterend = max(0.1, deadline - time.time())
+                ws.settimeout(resterend)
+                ruw = ws.recv()
+                try:
+                    msg = json.loads(ruw)
+                except (TypeError, ValueError):
+                    continue
+                if msg.get("t") in verwacht_types:
+                    return msg
+            return None
+
+        try:
+            self._log("Verbinden met 192.168.4.1 ...")
+            ws = websocket.create_connection("ws://192.168.4.1:8080/", timeout=6)
+        except Exception as e:
+            self._log(f"Geen verbinding met het BKOS-NUI hotspot-netwerk: {e}", "err")
+            self._log("→ Verbind eerst zelf met het open netwerk 'BKOS-NUI…', of gebruik "
+                      "http://192.168.4.1/ handmatig (huidige pincode: 0000).", "dim")
+            self.after(0, lambda: self._btn_pin_instellen.config(state="normal"))
+            return
+        try:
+            ws.send(json.dumps({"t": "auth", "pin": "0000"}))
+            resp = _wacht_op(ws, ("auth_ok", "auth_fout"), time.time() + 6)
+            if resp is None:
+                self._log("Geen (geldig) antwoord ontvangen op de inlogpoging (time-out).", "err")
+                return
+            if resp.get("t") == "auth_fout":
+                self._log("Fabriekspincode 0000 werkt niet meer — dit apparaat is blijkbaar al "
+                          "ingesteld (niet vers geformatteerd). Wijzig de pincode via de webapp zelf.", "warn")
+                return
+
+            ws.send(json.dumps({"t": "pin_wijzig", "oud": "0000", "nieuw": pin}))
+            resp = _wacht_op(ws, ("pin_wijzig_res",), time.time() + 6)
+            if resp is None:
+                self._log("Geen antwoord ontvangen op de pincode-wijziging (time-out).", "err")
+            elif resp.get("ok"):
+                self._log(f"✓ Pincode ingesteld op {pin}.", "ok")
+            else:
+                self._log(f"Pincode wijzigen mislukt: {resp}", "err")
+        except Exception as e:
+            self._log(f"Verbindingsfout tijdens pincode instellen: {e}", "err")
+        finally:
+            try:
+                ws.close()
+            except Exception:
+                pass
+            self.after(0, lambda: self._btn_pin_instellen.config(state="normal"))
 
     # ─── WiFi OTA flashing ────────────────────────────────────────────────
 

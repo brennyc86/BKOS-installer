@@ -22,7 +22,7 @@ jobs:
           python-version: "3.11"
 
       - name: Dependencies installeren
-        run: pip install pyinstaller pyserial zeroconf esptool
+        run: pip install pyinstaller pyserial zeroconf esptool websocket-client
 
       - name: Bouwen
         run: python build.py

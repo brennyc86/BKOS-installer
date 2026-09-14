@@ -549,6 +549,14 @@ ICON_PNG_B64 = (
     "LQCwooW9XXGAQMADAgICAgICAgICAgICAgICAgICAmYO/x/iXxu+ly4hpAAAAABJRU5ErkJggg=="
 )
 
+# ─── Versie ───────────────────────────────────────────────────────────────
+# Zelfde schema als de BKOS-firmware zelf (zie BKOS-NUI/CLAUDE.md):
+# MAJOR.MINOR.YYMMDD.ITERATIE tijdens ontwikkeling (start 0.0), en bij een
+# door Brendan uitgeroepen finale versie MAJOR.MINOR.PATCH (bv. 0.1.0,
+# daarna 0.1.1/0.2.0/1.0.0 afhankelijk van hoe groot de wijziging is) —
+# 0.0.0 is bewust nooit een geldige finale versie.
+INSTALLER_VERSIE = "0.0.260914.1"
+
 # ─── Kleuren ──────────────────────────────────────────────────────────────
 
 C_BG      = "#1a2e1e"   # donker groen tussenruimte
@@ -584,11 +592,13 @@ CATALOG = {
                 "ser_addr":       "0x10000",
                 "baud":           "921600",
                 "ota_port":       3232,
-                # Alleen voor "Volledige herinstallatie" (nieuwe FATFS-
-                # partitietabel) — arduino-cli produceert deze twee toch al,
-                # build.yml publiceert ze sinds de FATFS-migratie mee.
-                "bootloader_bin": "firmware/bkos_esp32s3_8048s070.bootloader.bin",
-                "partitions_bin": "firmware/bkos_esp32s3_8048s070.partitions.bin",
+                # Alleen voor "Volledige herinstallatie" (nieuwe ~9,5MB
+                # opslagpartitie) — arduino-cli/gen_esp32part.py produceren
+                # deze toch al, build.yml publiceert ze mee. Twee varianten:
+                # FATFS (aanbevolen) en SPIFFS, zelfde indeling verder.
+                "bootloader_bin":        "firmware/bkos_esp32s3_8048s070.bootloader.bin",
+                "partitions_bin_fat":    "firmware/bkos_esp32s3_8048s070.partitions.bin",
+                "partitions_bin_spiffs": "firmware/bkos_esp32s3_8048s070.partitions_spiffs.bin",
             },
             "ESP32 WROOM  ·  2.8\" 2432": {
                 "versie_bestand": "firmware/versie_wroom.txt",
@@ -731,7 +741,7 @@ class BkosInstaller(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("BKOS Installer")
+        self.title(f"BKOS Installer  {INSTALLER_VERSIE}")
         self.geometry("740x640")
         self.resizable(True, True)
         self.minsize(640, 560)
@@ -798,7 +808,7 @@ class BkosInstaller(tk.Tk):
         tk.Label(hdr_tekst, text="BKOS Installer",
             bg=C_SURFACE, fg=C_TEKST,
             font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        tk.Label(hdr_tekst, text="Boordcomputer installatie hulpprogramma",
+        tk.Label(hdr_tekst, text=f"Boordcomputer installatie hulpprogramma  ·  v{INSTALLER_VERSIE}",
             bg=C_SURFACE, fg=C_DIM,
             font=("Segoe UI", 8)).pack(anchor="w")
         # Zeilboot rechts in header (eerst packen = meest rechts)
@@ -1016,12 +1026,31 @@ class BkosInstaller(tk.Tk):
         r_vh = rij(vh_frame)
         self._var_vol_herinstall = tk.BooleanVar(value=False)
         tk.Checkbutton(r_vh,
-            text="Nieuw bestandssysteem (FATFS) — wist alles",
+            text="Nieuwe ~9,5MB opslagpartitie — wist alles",
             variable=self._var_vol_herinstall,
             bg=C_SURFACE, fg=C_ROOD, selectcolor=C_PANEL,
             activebackground=C_SURFACE, activeforeground=C_ROOD,
             font=("Segoe UI", 9),
             command=self._on_vol_herinstall_toggle).pack(side="left")
+
+        # Brendan wil zelf kunnen kiezen tussen FATFS en SPIFFS i.p.v. FATFS
+        # opgelegd te krijgen — FATFS blijft wel de aanbevolen standaard
+        # (weigert minder snel schrijvingen bij hoge bezetting, zie
+        # BKOS-NUI/CLAUDE.md taak 249/250).
+        self._var_fs_keuze = tk.StringVar(value="fat")
+        r_vh_fs = rij(vh_frame)
+        self._rb_fs_fat = tk.Radiobutton(r_vh_fs, text="FATFS (aanbevolen)",
+            variable=self._var_fs_keuze, value="fat",
+            bg=C_SURFACE, fg=C_TEKST, selectcolor=C_PANEL,
+            activebackground=C_SURFACE, activeforeground=C_TEKST,
+            font=("Segoe UI", 9), state="disabled")
+        self._rb_fs_fat.pack(side="left")
+        self._rb_fs_spiffs = tk.Radiobutton(r_vh_fs, text="SPIFFS",
+            variable=self._var_fs_keuze, value="spiffs",
+            bg=C_SURFACE, fg=C_TEKST, selectcolor=C_PANEL,
+            activebackground=C_SURFACE, activeforeground=C_TEKST,
+            font=("Segoe UI", 9), state="disabled")
+        self._rb_fs_spiffs.pack(side="left", padx=(10, 0))
 
         r_vh2 = rij(vh_frame)
         lbl(r_vh2, "Nieuwe pin:").pack(side="left")
@@ -1130,8 +1159,11 @@ class BkosInstaller(tk.Tk):
 
     def _on_vol_herinstall_toggle(self):
         aan = self._var_vol_herinstall.get()
-        self._ent_nieuwe_pin.config(state="normal" if aan else "disabled")
-        self._btn_pin_instellen.config(state="normal" if aan else "disabled")
+        state = "normal" if aan else "disabled"
+        self._ent_nieuwe_pin.config(state=state)
+        self._btn_pin_instellen.config(state=state)
+        self._rb_fs_fat.config(state=state)
+        self._rb_fs_spiffs.config(state=state)
 
     def _on_com_select(self, event=None):
         label = self._var_com.get()
@@ -1389,7 +1421,8 @@ class BkosInstaller(tk.Tk):
 
         # ── Volledige herinstallatie: alleen ESP32-S3/BKOS-NUI via USB ──────
         if self._var_vol_herinstall.get():
-            if methode != "serieel" or not plat.get("bootloader_bin") or not plat.get("partitions_bin"):
+            partitions_key = f"partitions_bin_{self._var_fs_keuze.get()}"  # _fat of _spiffs
+            if methode != "serieel" or not plat.get("bootloader_bin") or not plat.get(partitions_key):
                 messagebox.showerror("Volledige herinstallatie",
                     "Dit is alleen mogelijk voor BKOS-NUI op de ESP32-S3, via USB (serieel).")
                 return
@@ -1461,11 +1494,13 @@ class BkosInstaller(tk.Tk):
             # het gekozen versiekanaal van de app zelf te koppelen.
             bootloader_pad = partitions_pad = None
             if self._var_vol_herinstall.get():
+                fs_keuze = self._var_fs_keuze.get()  # "fat" of "spiffs"
                 bl_rel = plat.get("bootloader_bin")
-                pt_rel = plat.get("partitions_bin")
+                pt_rel = plat.get(f"partitions_bin_{fs_keuze}")
                 if not bl_rel or not pt_rel:
                     self._log("Volledige herinstallatie niet beschikbaar voor dit platform.", "err")
                     return
+                self._log(f"Bestandssysteem: {fs_keuze.upper()}", "dim")
                 bootloader_pad = self._download(f"{RAW_BASE}/{repo}/{branch}/{bl_rel}",
                                                  os.path.basename(bl_rel), forceer_vers=True)
                 partitions_pad = self._download(f"{RAW_BASE}/{repo}/{branch}/{pt_rel}",

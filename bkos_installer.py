@@ -579,6 +579,19 @@ C_BTN_HOV = "#3a7d40"
 RAW_BASE = "https://raw.githubusercontent.com"
 API_BASE = "https://api.github.com"
 
+# Offset/grootte van de data-partitie in partitions_s3_16mb(_spiffs).csv —
+# zowel de fat- als de spiffs-variant gebruiken exact deze range. Nodig om
+# 'm expliciet te WISSEN vóór een "Volledige herinstallatie": alleen de
+# nieuwe partitietabel neerzetten was niet genoeg gebleken — als de oude,
+# kleinere SPIFFS-data toevallig nog een geldige (want ongewijzigde)
+# SPIFFS-filesystem aan het begin van die range vormt, mount SPIFFS.begin()
+# die gewoon weer (oude foto's blijven staan, en de boel wordt traag omdat
+# de gemounte filesystem-grootte niet meer overeenkomt met de daadwerkelijke
+# partitiegrootte). Expliciet wissen dwingt in alle gevallen een verse
+# format af, voor zowel FATFS als SPIFFS.
+DATA_PARTITIE_OFFSET  = 0x670000
+DATA_PARTITIE_GROOTTE = 0x980000  # ~9,5MB
+
 CATALOG = {
     "BKOS-NUI": {
         "repo":   "brennyc86/BKOS-NUI",
@@ -1092,8 +1105,10 @@ class BkosInstaller(tk.Tk):
         self._ent_nieuwe_pin.pack(side="left")
 
         tk.Label(vh_frame,
-            text="Schrijft ook bootloader + partitietabel opnieuw. Wist foto's, WiFi-instellingen, "
-                 "gasten-pincodes, kanaalnamen en meldingsinstellingen. Geen weg terug.",
+            text="Wist de data-partitie, schrijft bootloader + partitietabel opnieuw. Wist foto's, "
+                 "WiFi-instellingen, gasten-pincodes, kanaalnamen en meldingsinstellingen. Geen weg "
+                 "terug. De eerste opstart erna kan tot een minuut stil lijken te staan terwijl het "
+                 "nieuwe bestandssysteem geformatteerd wordt (vooral bij FATFS) — dat is normaal.",
             bg=C_PANEL, fg=C_DIM, font=("Segoe UI", 8),
             wraplength=300, justify="left").pack(anchor="w", padx=12, pady=(2, 4))
 
@@ -1590,6 +1605,37 @@ class BkosInstaller(tk.Tk):
 
     # ─── Serieel flashing (esptool) ───────────────────────────────────────
 
+    def _esptool_uitvoeren(self, esptool_args, pct_start, pct_eind):
+        """Eén esptool-commando (erase_region of write_flash) uitvoeren, zowel
+        in de PyInstaller-.exe (module-API) als in dev-modus (subprocess).
+        Geeft True terug bij succes."""
+        if getattr(sys, "frozen", False):
+            try:
+                import esptool
+                def _voortgang(pct):
+                    self._set_progress(pct_start + int(pct * (pct_eind - pct_start) / 100))
+                old_stdout = sys.stdout
+                sys.stdout = _EsptoolCapture(self, _voortgang)
+                try:
+                    esptool.main(esptool_args)
+                finally:
+                    sys.stdout = old_stdout
+                self._set_progress(pct_eind)
+                return True
+            except SystemExit as e:
+                if str(e) != "0":
+                    self._log(f"esptool fout: {e}", "err")
+                    return False
+                return True
+            except Exception as e:
+                self._log(f"esptool fout: {e}", "err")
+                return False
+        else:
+            # Dev-modus: subprocess via python -m esptool
+            # (vindt stub-bestanden altijd correct via module-pad)
+            cmd = [sys.executable, "-m", "esptool"] + esptool_args
+            return self._run_subprocess(cmd, pct_start, pct_eind - pct_start)
+
     def _flash_esptool(self, port, firmware_pad, plat, bootloader_pad=None, partitions_pad=None):
         chip = plat.get("chip", "esp32")
         baud = plat.get("baud", "921600")
@@ -1601,6 +1647,24 @@ class BkosInstaller(tk.Tk):
         self._set_status(f"Flashing {port}...")
         self._set_progress(45)
 
+        basis_args = ["--chip", chip, "--port", port, "--baud", baud]
+
+        if vol_herinstall:
+            # Data-partitie eerst expliciet wissen — alleen een nieuwe
+            # partitietabel neerzetten bleek niet genoeg: als de oude,
+            # kleinere filesystem-data toevallig nog geldig leek (met name
+            # bij SPIFFS→SPIFFS), werd die gewoon weer gemount i.p.v. een
+            # verse format af te dwingen. Zie DATA_PARTITIE_OFFSET hierboven.
+            self._log("Data-partitie wissen (voorkomt hergebruik van oude bestanden)...")
+            self._set_status("Data-partitie wissen...")
+            erase_args = basis_args + [
+                "--before", "default_reset", "--after", "no_reset",
+                "erase_region", hex(DATA_PARTITIE_OFFSET), hex(DATA_PARTITIE_GROOTTE),
+            ]
+            if not self._esptool_uitvoeren(erase_args, 45, 55):
+                self._log("Wissen van de data-partitie mislukt — installatie afgebroken.", "err")
+                return
+
         # Maak tijdelijk OTA-data reset bestand (8KB van 0xFF).
         # Na OTA-update start ESP32 van ota_0/ota_1 partitie, niet factory.
         # Door otadata (0xE000, 8KB) te wissen boot de bootloader opnieuw van
@@ -1610,10 +1674,7 @@ class BkosInstaller(tk.Tk):
             with os.fdopen(otadata_fd, "wb") as f:
                 f.write(b"\xff" * 8192)
 
-            esptool_args = [
-                "--chip",  chip,
-                "--port",  port,
-                "--baud",  baud,
+            esptool_args = basis_args + [
                 "--before", "default_reset",
                 "--after",  "hard_reset",
                 "write_flash", "-z",
@@ -1627,32 +1688,15 @@ class BkosInstaller(tk.Tk):
                 addr,       firmware_pad
             ]
 
-            if getattr(sys, "frozen", False):
-                # PyInstaller .exe: gebruik module-API (stub-bestanden via --collect-data)
-                try:
-                    import esptool
-                    def _voortgang(pct):
-                        self._set_progress(45 + int(pct * 0.55))
-                    old_stdout = sys.stdout
-                    sys.stdout = _EsptoolCapture(self, _voortgang)
-                    try:
-                        esptool.main(esptool_args)
-                    finally:
-                        sys.stdout = old_stdout
-                    self._log("✅ Flash geslaagd!", "ok")
-                    self._set_progress(100)
-                except SystemExit as e:
-                    if str(e) != "0":
-                        self._log(f"esptool fout: {e}", "err")
-                except Exception as e:
-                    self._log(f"esptool fout: {e}", "err")
+            pct_start = 55 if vol_herinstall else 45
+            self._set_status(f"Flashing {port}...")
+            if self._esptool_uitvoeren(esptool_args, pct_start, 100):
+                self._log("✅ Flash geslaagd!", "ok")
+                if vol_herinstall:
+                    self._log("Eerste opstart formatteert het nieuwe bestandssysteem — kan "
+                              "tot een minuut duren (vooral bij FATFS). Even geduld.", "dim")
             else:
-                # Dev-modus: subprocess via python -m esptool
-                # (vindt stub-bestanden altijd correct via module-pad)
-                cmd = [sys.executable, "-m", "esptool"] + esptool_args
-                ok = self._run_subprocess(cmd, 45, 55)
-                if not ok:
-                    self._log("→ Als de poort bezet is: sluit Arduino IDE / wacht 5s en probeer opnieuw.", "dim")
+                self._log("→ Als de poort bezet is: sluit Arduino IDE / wacht 5s en probeer opnieuw.", "dim")
         finally:
             try:
                 os.unlink(otadata_pad)

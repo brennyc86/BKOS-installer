@@ -13,6 +13,13 @@ args = [
     "--name", "BKOS_Installer",
     "--collect-data", "esptool",   # stub flasher JSON-bestanden meebundelen
     "--clean",
+    # UPX-compressie uit: UPX-gepakte executables zijn (naast --onefile's
+    # self-extracting gedrag zelf) een van de bekendste triggers voor
+    # antivirus/Chrome-heuristieken bij onbekende, ongesigneerde .exe's —
+    # malware gebruikt UPX vaak om zichzelf te comprimeren/verbergen, dus
+    # AV-engines zijn daar extra alert op. Zonder UPX wordt het bestand iets
+    # groter, maar dat weegt niet op tegen minder valse-positieven.
+    "--noupx",
 ]
 
 if os.path.exists("icon.ico"):

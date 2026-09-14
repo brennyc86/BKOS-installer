@@ -24,15 +24,16 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from tkinter import messagebox, scrolledtext, ttk
-import io
 
 # ─── Optionele imports ────────────────────────────────────────────────────
 
 try:
+    import serial
     import serial.tools.list_ports as list_ports
     SERIAL_OK = True
 except ImportError:
     SERIAL_OK = False
+    serial = None
     list_ports = None
 
 try:
@@ -1003,6 +1004,15 @@ class BkosInstaller(tk.Tk):
         self._lbl_mcu.pack(side="left", padx=8)
         self._cb_com.bind("<<ComboboxSelected>>", self._on_com_select)
 
+        rs2 = tk.Frame(t_ser, bg=C_SURFACE)
+        rs2.pack(fill="x", pady=(0, 4))
+        tk.Button(rs2, text="📟 Seriële monitor",
+            bg=C_PANEL, fg=C_TEKST, relief="flat", font=("Segoe UI", 8), cursor="hand2",
+            activebackground=C_PANEL, activeforeground=C_CYAAN,
+            command=self._open_serial_monitor).pack(side="left")
+        tk.Label(rs2, text="voor crash-/opstartmeldingen (bv. watchdog/brownout)",
+            bg=C_SURFACE, fg=C_DIM, font=("Segoe UI", 8)).pack(side="left", padx=6)
+
         # Tab WiFi
         t_wifi = tk.Frame(tabs, bg=C_SURFACE)
         tabs.add(t_wifi, text="WiFi (OTA)")
@@ -1254,6 +1264,110 @@ class BkosInstaller(tk.Tk):
         else:
             self._var_com.set("(geen poorten gevonden)")
             self._lbl_mcu.config(text="")
+
+    # ─── Seriële monitor ────────────────────────────────────────────────────
+    # Los venster dat de gekozen poort rechtstreeks uitleest — vooral bedoeld
+    # om crash-/opstartmeldingen te vangen (bv. "Task watchdog got triggered"
+    # of "Brownout detector was triggered") die anders onzichtbaar blijven.
+    # Startbaudrate 115200: dat is de ESP32(-S3) ROM-bootloader/paniek-
+    # console-snelheid, en op BKOS-NUI wordt de poort pas ná het inlezen van
+    # het bestandssysteem omgezet naar 9600 (de IO-bus-snelheid naar de
+    # ATtiny) — een crash tijdens die eerste stap (bv. het formatteren van
+    # een vers bestandssysteem) print dus nog op 115200.
+    def _open_serial_monitor(self):
+        if not SERIAL_OK:
+            messagebox.showerror("Seriële monitor", "De 'pyserial'-module ontbreekt.")
+            return
+        com_label = self._var_com.get()
+        poort = com_label.split()[0] if com_label else ""
+        if not poort or "geen" in poort.lower():
+            messagebox.showwarning("Seriële monitor", "Geen seriële poort geselecteerd.")
+            return
+        if self._flash_thread and self._flash_thread.is_alive():
+            messagebox.showwarning("Seriële monitor", "Kan niet monitoren terwijl er geflasht wordt.")
+            return
+
+        win = tk.Toplevel(self)
+        win.title(f"Seriële monitor — {poort}")
+        win.configure(bg=C_BG)
+        win.geometry("640x420")
+
+        top = tk.Frame(win, bg=C_BG)
+        top.pack(fill="x", padx=8, pady=6)
+        tk.Label(top, text="Baudrate:", bg=C_BG, fg=C_SURFACE,
+            font=("Segoe UI", 9)).pack(side="left")
+        baud_var = tk.StringVar(value="115200")
+        baud_combo = ttk.Combobox(top, textvariable=baud_var,
+            values=["115200", "9600", "74880", "921600"], width=10, state="readonly")
+        baud_combo.pack(side="left", padx=6)
+
+        txt = scrolledtext.ScrolledText(win, bg=C_SURFACE, fg=C_TEKST,
+            font=("Consolas", 9), state="disabled", wrap="word")
+        txt.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        toestand = {"ser": None, "stop": threading.Event()}
+
+        def _regel_tonen(tekst):
+            txt.config(state="normal")
+            txt.insert("end", tekst)
+            txt.see("end")
+            txt.config(state="disabled")
+
+        def _lezen(stop_event):
+            try:
+                ser = serial.Serial(poort, int(baud_var.get()), timeout=0.2)
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror(
+                    "Seriële monitor", f"Kon poort niet openen: {e}"))
+                return
+            toestand["ser"] = ser
+            while not stop_event.is_set():
+                try:
+                    regel = ser.readline()
+                except Exception:
+                    break
+                if regel:
+                    tekst = regel.decode(errors="replace")
+                    self.after(0, lambda t=tekst: _regel_tonen(t))
+            try:
+                ser.close()
+            except Exception:
+                pass
+
+        def _start():
+            toestand["stop"] = threading.Event()
+            threading.Thread(target=_lezen, args=(toestand["stop"],), daemon=True).start()
+
+        def _herverbind():
+            toestand["stop"].set()
+            if toestand["ser"]:
+                try:
+                    toestand["ser"].close()
+                except Exception:
+                    pass
+            self.after(150, _start)
+
+        tk.Button(top, text="↻ Opnieuw verbinden", bg=C_RAND, fg=C_TEKST,
+            relief="flat", font=("Segoe UI", 8), cursor="hand2",
+            activebackground=C_RAND, activeforeground=C_CYAAN,
+            command=_herverbind).pack(side="left", padx=6)
+        tk.Button(top, text="Wissen", bg=C_PANEL, fg=C_TEKST,
+            relief="flat", font=("Segoe UI", 8), cursor="hand2",
+            activebackground=C_PANEL, activeforeground=C_TEKST,
+            command=lambda: (txt.config(state="normal"), txt.delete("1.0", "end"),
+                              txt.config(state="disabled"))).pack(side="left")
+
+        def _on_close():
+            toestand["stop"].set()
+            if toestand["ser"]:
+                try:
+                    toestand["ser"].close()
+                except Exception:
+                    pass
+            win.destroy()
+        win.protocol("WM_DELETE_WINDOW", _on_close)
+
+        _start()
 
     # ─── WiFi / mDNS ──────────────────────────────────────────────────────
 
@@ -1606,35 +1720,20 @@ class BkosInstaller(tk.Tk):
     # ─── Serieel flashing (esptool) ───────────────────────────────────────
 
     def _esptool_uitvoeren(self, esptool_args, pct_start, pct_eind):
-        """Eén esptool-commando (erase_region of write_flash) uitvoeren, zowel
-        in de PyInstaller-.exe (module-API) als in dev-modus (subprocess).
-        Geeft True terug bij succes."""
+        """Eén esptool-commando (erase_region of write_flash) uitvoeren in
+        zijn EIGEN, verse proces — nodig omdat esptool.main() twee keer
+        achter elkaar in hetzelfde proces aanroepen (in de .exe) onbetrouwbaar
+        bleek, zie de "--esptool-worker"-toelichting bij het entry point
+        onderaan dit bestand. Geeft True terug bij succes."""
         if getattr(sys, "frozen", False):
-            try:
-                import esptool
-                def _voortgang(pct):
-                    self._set_progress(pct_start + int(pct * (pct_eind - pct_start) / 100))
-                old_stdout = sys.stdout
-                sys.stdout = _EsptoolCapture(self, _voortgang)
-                try:
-                    esptool.main(esptool_args)
-                finally:
-                    sys.stdout = old_stdout
-                self._set_progress(pct_eind)
-                return True
-            except SystemExit as e:
-                if str(e) != "0":
-                    self._log(f"esptool fout: {e}", "err")
-                    return False
-                return True
-            except Exception as e:
-                self._log(f"esptool fout: {e}", "err")
-                return False
+            # PyInstaller .exe: herstart zichzelf als esptool-doorgeefluik
+            # i.p.v. een los esptool.exe nodig te hebben.
+            cmd = [sys.executable, "--esptool-worker"] + esptool_args
         else:
             # Dev-modus: subprocess via python -m esptool
             # (vindt stub-bestanden altijd correct via module-pad)
             cmd = [sys.executable, "-m", "esptool"] + esptool_args
-            return self._run_subprocess(cmd, pct_start, pct_eind - pct_start)
+        return self._run_subprocess(cmd, pct_start, pct_eind - pct_start)
 
     def _flash_esptool(self, port, firmware_pad, plat, bootloader_pad=None, partitions_pad=None):
         chip = plat.get("chip", "esp32")
@@ -2168,34 +2267,28 @@ else:
         def __init__(self, app): pass
 
 
-# ─── esptool stdout capture ───────────────────────────────────────────────
-
-class _EsptoolCapture:
-    """Vangt esptool stdout op en stuurt het naar de log."""
-    def __init__(self, app: BkosInstaller, voortgang_cb):
-        self._app = app
-        self._voortgang_cb = voortgang_cb
-        self._buf = ""
-
-    def write(self, tekst: str):
-        self._buf += tekst
-        while "\n" in self._buf:
-            lijn, self._buf = self._buf.split("\n", 1)
-            lijn = lijn.strip()
-            if lijn:
-                self._app._log(lijn)
-            m = re.search(r'(\d+)\s*%', lijn)
-            if m:
-                self._voortgang_cb(int(m.group(1)))
-
-    def flush(self):
-        pass
-
-    def fileno(self):
-        raise io.UnsupportedOperation("fileno")
-
-
 # ─── Entry point ──────────────────────────────────────────────────────────
+# "--esptool-worker": als de .exe zichzelf met dit vlag herstart, gedraagt
+# 'ie zich puur als esptool-doorgeefluik en sluit meteen af — zie
+# _esptool_uitvoeren() hierboven. Nodig omdat esptool.main() twee keer ACHTER
+# ELKAAR IN HETZELFDE proces aanroepen (voor "Volledige herinstallatie": eerst
+# erase_region, dan write_flash) onbetrouwbaar bleek: esptool is geschreven
+# om één keer per proces te draaien als losstaande CLI-tool, niet als
+# herbruikbare functie — interne state (o.a. rond de seriële poort/ROM-
+# loader) kan tussen twee aanroepen in hetzelfde proces blijven hangen. Elke
+# esptool-aanroep krijgt nu zijn eigen, verse proces, ook in de PyInstaller-
+# .exe (die zichzelf hiervoor herstart i.p.v. een los esptool.exe nodig te
+# hebben).
+if len(sys.argv) > 1 and sys.argv[1] == "--esptool-worker":
+    import esptool
+    try:
+        esptool.main(sys.argv[2:])
+        sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"esptool fout: {e}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     app = BkosInstaller()

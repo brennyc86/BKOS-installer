@@ -742,7 +742,7 @@ class BkosInstaller(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"BKOS Installer  {INSTALLER_VERSIE}")
-        self.geometry("740x640")
+        self.geometry("740x760")
         self.resizable(True, True)
         self.minsize(640, 560)
         self.configure(bg=C_BG)
@@ -824,10 +824,41 @@ class BkosInstaller(tk.Tk):
         main = tk.Frame(self, bg=C_BG)
         main.pack(fill="both", expand=True, padx=0)
 
-        # Linker kolom (instellingen)
-        left = tk.Frame(main, bg=C_BG, width=360)
-        left.pack(side="left", fill="y", padx=(12, 6), pady=12)
-        left.pack_propagate(False)
+        # Linker kolom (instellingen) — scrollbaar: het aantal secties hierin
+        # groeit met de tijd (laatst de hele "Volledige herinstallatie"-
+        # sectie erbij, wat zonder dit precies het probleem gaf dat Brendan
+        # meldde — de knop bestond wel, maar viel buiten het vaste,
+        # niet-scrollende venster en was dus onzichtbaar). Een Canvas+
+        # Scrollbar i.p.v. een kale Frame voorkomt dat een toekomstige
+        # sectie hetzelfde lot ondergaat.
+        left_outer = tk.Frame(main, bg=C_BG, width=360)
+        left_outer.pack(side="left", fill="y", padx=(12, 6), pady=12)
+        left_outer.pack_propagate(False)
+
+        left_canvas = tk.Canvas(left_outer, bg=C_BG, highlightthickness=0)
+        left_scroll = tk.Scrollbar(left_outer, orient="vertical", command=left_canvas.yview)
+        left_canvas.configure(yscrollcommand=left_scroll.set)
+        left_canvas.pack(side="left", fill="both", expand=True)
+        left_scroll.pack(side="right", fill="y")
+
+        left = tk.Frame(left_canvas, bg=C_BG)
+        left_window = left_canvas.create_window((0, 0), window=left, anchor="nw")
+
+        def _left_configure(event=None):
+            left_canvas.configure(scrollregion=left_canvas.bbox("all"))
+        def _canvas_configure(event):
+            left_canvas.itemconfig(left_window, width=event.width)
+        left.bind("<Configure>", _left_configure)
+        left_canvas.bind("<Configure>", _canvas_configure)
+
+        def _mousewheel(event):
+            # Windows/macOS geven event.delta; alleen scrollen als de muis
+            # boven de linkerkolom hangt (bind_all zou anders ook de LOG-
+            # rechterkolom laten meescrollen).
+            left_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        left_canvas.bind("<Enter>", lambda e: left_canvas.bind_all("<MouseWheel>", _mousewheel))
+        left_canvas.bind("<Leave>", lambda e: left_canvas.unbind_all("<MouseWheel>"))
+
         self._left_frame = left
 
         # Rechter kolom (log)
@@ -2052,7 +2083,9 @@ class BkosInstaller(tk.Tk):
 
     def _stel_min_hoogte_in(self):
         self.update_idletasks()
-        # Hardcoded minimum: header(64) + streep(3) + footer(56) + content(489)
+        # Puur een prettige ondergrens — de linkerkolom scrollt nu (zie
+        # _bouw_ui), dus dit hoeft niet meer exact de som van alle secties
+        # te zijn zoals vóór die wijziging.
         self.minsize(640, 612)
 
     def on_close(self):
